@@ -847,7 +847,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                                     "size": "sm",
                                     "color": "#240046",
                                     "flex": 6,
-                                    "wrap": true
+                                    "wrap": True
                                 }
                             ]
                         },
@@ -906,7 +906,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                                     "size": "sm",
                                     "color": "#240046",
                                     "flex": 6,
-                                    "wrap": true
+                                    "wrap": True
                                 }
                             ]
                         },
@@ -936,7 +936,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                                     "size": "sm",
                                     "color": "#240046",
                                     "flex": 6,
-                                    "wrap": true
+                                    "wrap": True
                                 }
                             ]
                         }
@@ -981,7 +981,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                                     "text": "หากไม่สามารถมาตามนัดได้ กรุณาแจ้งยกเลิกหรือเลื่อนนัดล่วงหน้า",
                                     "size": "xxs",
                                     "color": "#666666",
-                                    "wrap": true,
+                                    "wrap": True,
                                     "margin": "xs"
                                 }
                             ]
@@ -1037,7 +1037,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                             "text": "ต.ท่าเกษม อ.เมืองสระแก้ว จ.สระแก้ว",
                             "color": cfg["bg_color"],
                             "size": "xxs",
-                            "wrap": true
+                            "wrap": True
                         }
                     ]
                 },
