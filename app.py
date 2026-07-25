@@ -441,6 +441,15 @@ def validate_thai_cid(cid):
     check_digit = (11 - (sum_val % 11)) % 10
     return check_digit == int(cid[12])
 
+def get_queue_number(app_time):
+    """แปลงเวลาจองเป็นลำดับคิว โดยเริ่ม 08:30 เป็นคิวที่ 1"""
+    t_clean = ":".join(str(app_time).split(":")[:2])
+    slots = ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"]
+    try:
+        return slots.index(t_clean) + 1
+    except ValueError:
+        return 1
+
 def get_calendar_service():
     """สร้าง Google Calendar API Service จากคีย์ลับใน secrets"""
     creds_info = st.secrets.get("google_calendar_credentials", None)
@@ -585,7 +594,8 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
         
         # ลองบันทึก Google Calendar ในโหมดเดโม (ถ้าตั้งค่า Service Account ไว้)
         try:
-            cal_desc = f"รหัสอ้างอิงการจองคิว: DEMO-{app_id:04d}\nผู้รับบริการ: {name}\nเบอร์โทรศัพท์: {phone}\nอาการ/หมายเหตุ: {note}\n\nจองคิวออนไลน์ผ่านระบบ รพ.สต.ท่าเกษม"
+            q_num = get_queue_number(app_time)
+            cal_desc = f"รหัสอ้างอิงการจองคิว: คิวที่ {q_num} (อ้างอิง: DEMO-{app_id:04d})\nผู้รับบริการ: {name}\nเบอร์โทรศัพท์: {phone}\nอาการ/หมายเหตุ: {note}\n\nจองคิวออนไลน์ผ่านระบบ รพ.สต.ท่าเกษม"
             dept_title = DEPT_THEMES.get(dept, {}).get("title_thai", "บริการทั่วไป")
             create_gcal_event(
                 dept=dept,
@@ -640,7 +650,8 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
                     
                     # บันทึกคิวลง Google Calendar กลางอัตโนมัติ
                     try:
-                        cal_desc = f"รหัสอ้างอิงการจองคิว: #{app_id_val}\nผู้รับบริการ: {name}\nเบอร์โทรศัพท์: {phone}\nอาการ/หมายเหตุ: {note}\n\nจองคิวออนไลน์ผ่านระบบ รพ.สต.ท่าเกษม"
+                        q_num = get_queue_number(app_time)
+                        cal_desc = f"รหัสอ้างอิงการจองคิว: คิวที่ {q_num} (อ้างอิง: #{app_id_val})\nผู้รับบริการ: {name}\nเบอร์โทรศัพท์: {phone}\nอาการ/หมายเหตุ: {note}\n\nจองคิวออนไลน์ผ่านระบบ รพ.สต.ท่าเกษม"
                         dept_title = DEPT_THEMES.get(dept, {}).get("title_thai", "บริการทั่วไป")
                         create_gcal_event(
                             dept=dept,
@@ -662,6 +673,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
     """สร้างโครงสร้าง JSON Flex Message ตามตัวอย่างใบประชาสัมพันธ์ของ รพ.สต.ท่าเกษม"""
     thai_date_str = format_thai_date(app_date)
     time_str = ":".join(str(app_time).split(":")[:2])
+    q_num = get_queue_number(app_time)
     
     DEPT_CONFIGS = {
         "dental": {
@@ -881,6 +893,35 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                                     "weight": "bold",
                                     "size": "sm",
                                     "color": "#240046",
+                                    "flex": 6
+                                }
+                            ]
+                        },
+                        {
+                            "type": "box",
+                            "layout": "horizontal",
+                            "alignItems": "center",
+                            "contents": [
+                                {
+                                    "type": "image",
+                                    "url": "https://img.icons8.com/color/96/numbered-list.png",
+                                    "size": "xxs",
+                                    "flex": 1
+                                },
+                                {
+                                    "type": "text",
+                                    "text": "ลำดับคิว",
+                                    "color": "#666666",
+                                    "size": "sm",
+                                    "flex": 3,
+                                    "margin": "md"
+                                },
+                                {
+                                    "type": "text",
+                                    "text": f"คิวที่ {q_num}",
+                                    "weight": "bold",
+                                    "size": "sm",
+                                    "color": cfg["primary"],
                                     "flex": 6
                                 }
                             ]
@@ -1824,10 +1865,12 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
      
     # --- STEP 4: แสดงผลสิทธิ์สำเร็จ (Success Screen) ---
     elif st.session_state.step == 4:
-        st.markdown("""
-        <div class="success-box" style="text-align: center;">
+        q_num = get_queue_number(st.session_state.selected_time)
+        st.markdown(f"""
+        <div class="success-box" style="text-align: center; padding: 1.5rem; background-color: #E8F5E9; border-radius: 12px; margin-bottom: 1.5rem;">
             <h2 style="margin: 0; color: #1B4332;">🎉 นัดหมายสำเร็จเรียบร้อยแล้วค่ะ</h2>
-            <p style="margin-top: 0.5rem; margin-bottom: 0;">รหัสการนัดหมายของคุณคือ: <b>#""" + str(st.session_state.appointment_id) + """</b></p>
+            <p style="margin-top: 0.5rem; margin-bottom: 0.2rem; font-size: 1.4rem; color: {theme['primary']};"><b>ลำดับคิวของคุณคือ: คิวที่ {q_num}</b></p>
+            <p style="margin-top: 0rem; margin-bottom: 0; color: #666; font-size: 0.9rem;">รหัสอ้างอิงการจองคิว: #{st.session_state.appointment_id}</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -1855,6 +1898,10 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
                 <tr style="border-bottom: 1px solid #eee;">
                     <td style="padding: 0.5rem 0; color: #888;"><b>เวลานัดหมาย:</b></td>
                     <td style="padding: 0.5rem 0; text-align: right; font-weight: bold; color: {theme['primary']};">{st.session_state.selected_time} น.</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 0.5rem 0; color: #888;"><b>ลำดับคิว:</b></td>
+                    <td style="padding: 0.5rem 0; text-align: right; font-weight: bold; color: {theme['primary']};">คิวที่ {q_num}</td>
                 </tr>
                 <tr>
                     <td style="padding: 0.5rem 0; color: #888;"><b>สถานที่:</b></td>
