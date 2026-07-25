@@ -1692,23 +1692,23 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
             st.write("#### ⏰ ช่วงเวลาให้บริการ")
             
             # แสดงผลตารางเวลา 3x3 Grid
-            cols = st.columns(3)
-            
-            for idx, slot_time in enumerate(all_slots):
-                col = cols[idx % 3]
-                is_booked = slot_time in booked_slots
-                
-                # ตรวจสอบเวลาที่จองแล้ว
-                if is_booked:
-                    col.button(f"❌ {slot_time} (เต็ม)", key=f"slot_{slot_time}", disabled=True, use_container_width=True)
-                else:
-                    # ตรวจสอบว่าเวลานี้ถูกเลือกอยู่หรือไม่
-                    is_selected = st.session_state.selected_time == slot_time
-                    btn_label = f"🟣 {slot_time}" if is_selected else f"⚪ {slot_time}"
+            for i in range(0, len(all_slots), 3):
+                cols = st.columns(3)
+                for idx, slot_time in enumerate(all_slots[i:i+3]):
+                    col = cols[idx]
+                    is_booked = slot_time in booked_slots
                     
-                    if col.button(btn_label, key=f"slot_{slot_time}", use_container_width=True):
-                        st.session_state.selected_time = slot_time
-                        st.rerun()
+                    # ตรวจสอบเวลาที่จองแล้ว
+                    if is_booked:
+                        col.button(f"❌ {slot_time} (เต็ม)", key=f"slot_{slot_time}", disabled=True, use_container_width=True)
+                    else:
+                        # ตรวจสอบว่าเวลานี้ถูกเลือกอยู่หรือไม่
+                        is_selected = st.session_state.selected_time == slot_time
+                        btn_label = f"🟣 {slot_time}" if is_selected else f"⚪ {slot_time}"
+                        
+                        if col.button(btn_label, key=f"slot_{slot_time}", use_container_width=True):
+                            st.session_state.selected_time = slot_time
+                            st.rerun()
      
             # ควบคุมการเปลี่ยนหน้า
             st.divider()
