@@ -449,7 +449,12 @@ def get_calendar_service():
     try:
         creds_dict = dict(creds_info)
         if "private_key" in creds_dict:
-            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+            pk_val = creds_dict["private_key"]
+            if pk_val.startswith("-----BEGIN PRIVATE KEY-----\\nn"):
+                pk_val = pk_val.replace("-----BEGIN PRIVATE KEY-----\\nn", "-----BEGIN PRIVATE KEY-----\\n", 1)
+            elif pk_val.startswith("-----BEGIN PRIVATE KEY-----\nn"):
+                pk_val = pk_val.replace("-----BEGIN PRIVATE KEY-----\nn", "-----BEGIN PRIVATE KEY-----\n", 1)
+            creds_dict["private_key"] = pk_val.replace("\\n", "\n")
             
         scopes = ['https://www.googleapis.com/auth/calendar']
         creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=scopes)
@@ -1502,35 +1507,42 @@ def render_liff_login(liff_id):
     <body>
         <script>
             liff.init({{ liffId: "{liff_id}" }}).then(() => {{
+                const getParentUrl = () => {{
+                    try {{
+                        return new URL(window.parent.location.href);
+                    }} catch (e) {{
+                        if (document.referrer) {{
+                            return new URL(document.referrer);
+                        }}
+                        return new URL(window.location.href);
+                    }}
+                }};
+                
+                const updateParentUrl = (profile) => {{
+                    const parentUrl = getParentUrl();
+                    if (parentUrl.searchParams.get("userId") !== profile.userId) {{
+                        parentUrl.searchParams.set("userId", profile.userId);
+                        parentUrl.searchParams.set("displayName", profile.displayName);
+                        if (profile.pictureUrl) {{
+                            parentUrl.searchParams.set("pictureUrl", profile.pictureUrl);
+                        }}
+                        try {{
+                            window.parent.location.replace(parentUrl.toString());
+                        }} catch (e) {{
+                            window.parent.location.href = parentUrl.toString();
+                        }}
+                    }}
+                }};
+
                 if (liff.isInClient()) {{
                     if (!liff.isLoggedIn()) {{
                         liff.login();
                     }} else {{
-                        liff.getProfile().then(profile => {{
-                            const parentUrl = new URL(window.parent.location.href);
-                            if (parentUrl.searchParams.get("userId") !== profile.userId) {{
-                                parentUrl.searchParams.set("userId", profile.userId);
-                                parentUrl.searchParams.set("displayName", profile.displayName);
-                                if (profile.pictureUrl) {{
-                                    parentUrl.searchParams.set("pictureUrl", profile.pictureUrl);
-                                }}
-                                window.parent.location.href = parentUrl.toString();
-                            }}
-                        }});
+                        liff.getProfile().then(updateParentUrl);
                     }}
                 }} else {{
                     if (liff.isLoggedIn()) {{
-                        liff.getProfile().then(profile => {{
-                            const parentUrl = new URL(window.parent.location.href);
-                            if (parentUrl.searchParams.get("userId") !== profile.userId) {{
-                                parentUrl.searchParams.set("userId", profile.userId);
-                                parentUrl.searchParams.set("displayName", profile.displayName);
-                                if (profile.pictureUrl) {{
-                                    parentUrl.searchParams.set("pictureUrl", profile.pictureUrl);
-                                }}
-                                window.parent.location.href = parentUrl.toString();
-                            }}
-                        }});
+                        liff.getProfile().then(updateParentUrl);
                     }}
                 }}
             }});
