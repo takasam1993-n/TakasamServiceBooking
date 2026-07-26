@@ -190,41 +190,7 @@ DEPT_THEMES = {
     }
 }
 
-# Determine current selected department or fallback
-selected_dept = st.session_state.get("selected_dept", "")
-theme = DEPT_THEMES.get(selected_dept, DEPT_THEMES[""])
 
-# Override CSS properties based on current theme
-st.markdown(f"""
-<style>
-    .main-title {{
-        color: {theme['primary']} !important;
-    }}
-    .sub-title {{
-        color: {theme['primary']} !important;
-    }}
-    .service-card {{
-        border-left: 5px solid {theme['primary']} !important;
-    }}
-    .step-item.active::after {{
-        background-color: {theme['primary']} !important;
-    }}
-    .step-item.active .step-icon {{
-        background-color: {theme['primary']} !important;
-        box-shadow: 0 0 12px {theme['primary']}80 !important;
-    }}
-    .step-item.active .step-label {{
-        color: {theme['primary']} !important;
-    }}
-    div.stButton > button {{
-        background-color: {theme['primary']} !important;
-    }}
-    div.stButton > button:hover {{
-        background-color: {theme['text_dark']} !important;
-        box-shadow: 0 4px 10px {theme['text_dark']}80 !important;
-    }}
-</style>
-""", unsafe_allow_html=True)
 
 # ----------------- Supabase Connection & Configuration -----------------
 # Check credentials in Streamlit secrets
@@ -416,6 +382,78 @@ if "dept" in query_params:
         st.session_state.selected_dept = "physical_therapy"
 
 # ----------------- Helper Functions -----------------
+def fetch_all_departments():
+    """ดึงรายชื่อแผนกทั้งหมดที่มีการตั้งค่าในระบบ"""
+    if "settings" not in st.session_state:
+        get_settings("dental") # โหลดค่าตั้งต้นใส่ session_state.settings
+        
+    if is_demo:
+        depts = []
+        for key, val in st.session_state.settings.items():
+            depts.append({
+                "key": key,
+                "display_name": val.get("display_name") or DEPT_THEMES.get(key, {}).get("title_thai", key),
+                "theme_color": val.get("theme_color") or DEPT_THEMES.get(key, {}).get("primary", "#5A2A94"),
+                "banner_img": val.get("banner_img") or DEPT_THEMES.get(key, {}).get("banner_img", "https://img.icons8.com/color/144/hospital.png")
+            })
+        return depts
+        
+    if not supabase_client:
+        return []
+        
+    try:
+        response = supabase_client.table("system_settings").select("*").execute()
+        depts = []
+        for row in response.data:
+            key = row["department"]
+            depts.append({
+                "key": key,
+                "display_name": row.get("display_name") or DEPT_THEMES.get(key, {}).get("title_thai", key),
+                "theme_color": row.get("theme_color") or DEPT_THEMES.get(key, {}).get("primary", "#5A2A94"),
+                "banner_img": row.get("banner_img") or DEPT_THEMES.get(key, {}).get("banner_img", "https://img.icons8.com/color/144/hospital.png")
+            })
+        return depts
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาดในการดึงข้อมูลแผนก: {e}")
+        return []
+
+def get_current_theme(selected_dept):
+    """สร้างข้อมูลธีมของแผนกปัจจุบันแบบพลวัต โดยรวมจากฐานข้อมูลและค่าคอนฟิก"""
+    base_theme = {
+        "primary": "#5A2A94",
+        "primary_light": "#F3E8FF",
+        "text_dark": "#240046",
+        "gradient_bg": "linear-gradient(135deg, #F3E8FF 0%, #E9D8FD 100%)",
+        "banner_img": "https://img.icons8.com/color/144/hospital.png",
+        "title_thai": "ลงนัดออนไลน์",
+        "footer_bg": "#5A2A94"
+    }
+    
+    if not selected_dept:
+        return base_theme
+        
+    settings = get_settings(selected_dept)
+    orig_theme = DEPT_THEMES.get(selected_dept, {})
+    
+    primary_color = settings.get("theme_color") or orig_theme.get("primary") or "#5A2A94"
+    banner_img = settings.get("banner_img") or orig_theme.get("banner_img") or "https://img.icons8.com/color/144/hospital.png"
+    display_name = settings.get("display_name") or orig_theme.get("title_thai") or selected_dept
+    
+    primary_light = orig_theme.get("primary_light") or "#F3E8FF"
+    text_dark = orig_theme.get("text_dark") or "#240046"
+    gradient_bg = orig_theme.get("gradient_bg") or f"linear-gradient(135deg, {primary_color}1A 0%, {primary_color}33 100%)"
+    footer_bg = primary_color
+    
+    return {
+        "primary": primary_color,
+        "primary_light": primary_light,
+        "text_dark": text_dark,
+        "gradient_bg": gradient_bg,
+        "banner_img": banner_img,
+        "title_thai": display_name,
+        "footer_bg": footer_bg
+    }
+
 def get_settings(dept):
     """ดึงข้อมูลการตั้งค่าสำหรับแผนกที่ระบุ (หรือแผนก Dental เป็นหลักถ้าไม่ระบุ)"""
     if "settings" not in st.session_state:
@@ -427,7 +465,10 @@ def get_settings(dept):
                 "closed_dates": [],
                 "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
                 "max_bookings_per_slot": 1,
-                "slot_configs": []
+                "slot_configs": [],
+                "display_name": "แผนกทันตกรรม (Dental Care)",
+                "theme_color": "#7B2CBF",
+                "banner_img": "https://img.icons8.com/color/144/tooth.png"
             },
             "thai_traditional": {
                 "booking_range_days": 30,
@@ -435,7 +476,10 @@ def get_settings(dept):
                 "closed_dates": [],
                 "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
                 "max_bookings_per_slot": 1,
-                "slot_configs": []
+                "slot_configs": [],
+                "display_name": "แผนกแพทย์แผนไทย (Traditional Thai Medicine)",
+                "theme_color": "#2D6A4F",
+                "banner_img": "https://img.icons8.com/color/144/mortar-and-pestle.png"
             },
             "physical_therapy": {
                 "booking_range_days": 30,
@@ -443,7 +487,10 @@ def get_settings(dept):
                 "closed_dates": [],
                 "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
                 "max_bookings_per_slot": 1,
-                "slot_configs": []
+                "slot_configs": [],
+                "display_name": "แผนกกายภาพบำบัด (Physical Therapy)",
+                "theme_color": "#0077B6",
+                "banner_img": "https://img.icons8.com/color/144/physical-therapy.png"
             }
         }
         
@@ -469,7 +516,10 @@ def get_settings(dept):
                 "closed_dates": closed_dates,
                 "time_slots": time_slots,
                 "max_bookings_per_slot": row.get("max_bookings_per_slot", 1),
-                "slot_configs": row.get("slot_configs", [])
+                "slot_configs": row.get("slot_configs", []),
+                "display_name": row.get("display_name"),
+                "theme_color": row.get("theme_color"),
+                "banner_img": row.get("banner_img")
             }
         else:
             # หากไม่มีให้เพิ่มค่าตั้งต้นเข้าไป
@@ -481,14 +531,17 @@ def get_settings(dept):
                 "closed_dates": default_set["closed_dates"],
                 "time_slots": default_set["time_slots"],
                 "max_bookings_per_slot": default_set["max_bookings_per_slot"],
-                "slot_configs": default_set.get("slot_configs", [])
+                "slot_configs": default_set.get("slot_configs", []),
+                "display_name": default_set.get("display_name"),
+                "theme_color": default_set.get("theme_color"),
+                "banner_img": default_set.get("banner_img")
             }).execute()
             return default_set
     except Exception as e:
         print(f"เกิดข้อผิดพลาดในการดึงการตั้งค่าจาก DB: {e}")
         return st.session_state.settings.get(dept, st.session_state.settings["dental"])
 
-def update_settings_db(dept, booking_range_days, working_days, closed_dates, time_slots, max_bookings_per_slot, slot_configs=None):
+def update_settings_db(dept, booking_range_days, working_days, closed_dates, time_slots, max_bookings_per_slot, slot_configs=None, display_name=None, theme_color=None, banner_img=None):
     """อัปเดตการตั้งค่าของแผนก"""
     time_slots = [":".join(s.strip().split(":")[:2]) for s in time_slots if s.strip()]
     if slot_configs is None:
@@ -497,13 +550,22 @@ def update_settings_db(dept, booking_range_days, working_days, closed_dates, tim
     if is_demo:
         if "settings" not in st.session_state:
             get_settings(dept)
+        
+        curr = st.session_state.settings.get(dept, {})
+        final_display_name = display_name if display_name is not None else curr.get("display_name", DEPT_THEMES.get(dept, {}).get("title_thai", dept))
+        final_theme_color = theme_color if theme_color is not None else curr.get("theme_color", DEPT_THEMES.get(dept, {}).get("primary", "#5A2A94"))
+        final_banner_img = banner_img if banner_img is not None else curr.get("banner_img", DEPT_THEMES.get(dept, {}).get("banner_img", "https://img.icons8.com/color/144/hospital.png"))
+
         st.session_state.settings[dept] = {
             "booking_range_days": int(booking_range_days),
             "working_days": [int(d) for d in working_days],
             "closed_dates": [str(d) for d in closed_dates],
             "time_slots": time_slots,
             "max_bookings_per_slot": int(max_bookings_per_slot),
-            "slot_configs": slot_configs
+            "slot_configs": slot_configs,
+            "display_name": final_display_name,
+            "theme_color": final_theme_color,
+            "banner_img": final_banner_img
         }
         return True, "อัปเดตการตั้งค่าสำเร็จ (โหมดสาธิต)"
         
@@ -511,7 +573,17 @@ def update_settings_db(dept, booking_range_days, working_days, closed_dates, tim
         return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
         
     try:
-        response = supabase_client.table("system_settings").select("id").eq("department", dept).execute()
+        response = supabase_client.table("system_settings").select("*").eq("department", dept).execute()
+        
+        if response.data:
+            curr = response.data[0]
+        else:
+            curr = {}
+            
+        final_display_name = display_name if display_name is not None else curr.get("display_name", DEPT_THEMES.get(dept, {}).get("title_thai", dept))
+        final_theme_color = theme_color if theme_color is not None else curr.get("theme_color", DEPT_THEMES.get(dept, {}).get("primary", "#5A2A94"))
+        final_banner_img = banner_img if banner_img is not None else curr.get("banner_img", DEPT_THEMES.get(dept, {}).get("banner_img", "https://img.icons8.com/color/144/hospital.png"))
+
         data = {
             "department": dept,
             "booking_range_days": int(booking_range_days),
@@ -519,7 +591,10 @@ def update_settings_db(dept, booking_range_days, working_days, closed_dates, tim
             "closed_dates": [str(d) for d in closed_dates],
             "time_slots": time_slots,
             "max_bookings_per_slot": int(max_bookings_per_slot),
-            "slot_configs": slot_configs
+            "slot_configs": slot_configs,
+            "display_name": final_display_name,
+            "theme_color": final_theme_color,
+            "banner_img": final_banner_img
         }
         if response.data:
             supabase_client.table("system_settings").update(data).eq("department", dept).execute()
@@ -528,6 +603,140 @@ def update_settings_db(dept, booking_range_days, working_days, closed_dates, tim
         return True, "อัปเดตการตั้งค่าเรียบร้อยแล้ว"
     except Exception as e:
         return False, f"เกิดข้อผิดพลาดในการบันทึกการตั้งค่า: {e}"
+
+def create_department_db(key, display_name, theme_color, banner_img):
+    key = key.strip().lower()
+    display_name = display_name.strip()
+    if not key or not display_name:
+        return False, "กรุณากรอกรหัสแผนกและชื่อแผนกให้ครบถ้วน"
+    
+    if is_demo:
+        if "settings" not in st.session_state:
+            get_settings(key)
+        if key in st.session_state.settings:
+            return False, "มีรหัสแผนกนี้อยู่ในระบบแล้ว"
+        st.session_state.settings[key] = {
+            "booking_range_days": 30,
+            "working_days": [0, 1, 2, 3, 4],
+            "closed_dates": [],
+            "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
+            "max_bookings_per_slot": 1,
+            "slot_configs": [],
+            "display_name": display_name,
+            "theme_color": theme_color,
+            "banner_img": banner_img
+        }
+        return True, "เพิ่มแผนกใหม่ในระบบสาธิตสำเร็จ"
+        
+    if not supabase_client:
+        return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
+        
+    try:
+        res = supabase_client.table("system_settings").select("id").eq("department", key).execute()
+        if res.data:
+            return False, "มีรหัสแผนกนี้อยู่ในระบบแล้ว"
+            
+        supabase_client.table("system_settings").insert({
+            "department": key,
+            "display_name": display_name,
+            "theme_color": theme_color,
+            "banner_img": banner_img,
+            "booking_range_days": 30,
+            "working_days": [0, 1, 2, 3, 4],
+            "closed_dates": [],
+            "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
+            "max_bookings_per_slot": 1,
+            "slot_configs": []
+        }).execute()
+        return True, "เพิ่มแผนกใหม่ในระบบสำเร็จ"
+    except Exception as e:
+        return False, f"เกิดข้อผิดพลาด: {e}"
+
+def update_department_db(key, display_name, theme_color, banner_img):
+    display_name = display_name.strip()
+    if not display_name:
+        return False, "กรุณากรอกชื่อแผนก"
+        
+    if is_demo:
+        if "settings" not in st.session_state:
+            get_settings(key)
+        if key not in st.session_state.settings:
+            return False, "ไม่พบข้อมูลแผนกนี้"
+        st.session_state.settings[key]["display_name"] = display_name
+        st.session_state.settings[key]["theme_color"] = theme_color
+        st.session_state.settings[key]["banner_img"] = banner_img
+        return True, "แก้ไขข้อมูลแผนกในระบบสาธิตสำเร็จ"
+        
+    if not supabase_client:
+        return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
+        
+    try:
+        supabase_client.table("system_settings").update({
+            "display_name": display_name,
+            "theme_color": theme_color,
+            "banner_img": banner_img
+        }).eq("department", key).execute()
+        return True, "แก้ไขข้อมูลแผนกสำเร็จ"
+    except Exception as e:
+        return False, f"เกิดข้อผิดพลาด: {e}"
+
+def delete_department_db(key):
+    if is_demo:
+        if "settings" not in st.session_state:
+            get_settings(key)
+        if key in st.session_state.settings:
+            del st.session_state.settings[key]
+            if "services" in st.session_state.mock_db:
+                st.session_state.mock_db["services"] = [s for s in st.session_state.mock_db["services"] if s.get("department") != key]
+            return True, "ลบแผนกและข้อมูลบริการที่เกี่ยวข้องสำเร็จ (ระบบสาธิต)"
+        return False, "ไม่พบแผนกที่ต้องการลบ"
+        
+    if not supabase_client:
+        return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
+        
+    try:
+        supabase_client.table("system_settings").delete().eq("department", key).execute()
+        supabase_client.table("services").delete().eq("department", key).execute()
+        supabase_client.table("time_slots").delete().eq("department", key).execute()
+        return True, "ลบแผนกและข้อมูลการตั้งค่าทั้งหมดของแผนกนี้เรียบร้อยแล้ว"
+    except Exception as e:
+        return False, f"เกิดข้อผิดพลาดในการลบแผนก: {e}"
+
+# Determine current selected department or fallback
+selected_dept = st.session_state.get("selected_dept", "")
+theme = get_current_theme(selected_dept)
+
+# Override CSS properties based on current theme
+st.markdown(f"""
+<style>
+    .main-title {{
+        color: {theme['primary']} !important;
+    }}
+    .sub-title {{
+        color: {theme['primary']} !important;
+    }}
+    .service-card {{
+        border-left: 5px solid {theme['primary']} !important;
+    }}
+    .step-item.active::after {{
+        background-color: {theme['primary']} !important;
+    }}
+    .step-item.active .step-icon {{
+        background-color: {theme['primary']} !important;
+        box-shadow: 0 0 12px {theme['primary']}80 !important;
+    }}
+    .step-item.active .step-label {{
+        color: {theme['primary']} !important;
+    }}
+    div.stButton > button {{
+        background-color: {theme['primary']} !important;
+    }}
+    div.stButton > button:hover {{
+        background-color: {theme['text_dark']} !important;
+        box-shadow: 0 4px 10px {theme['text_dark']}80 !important;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
 def format_thai_date(date_obj):
     """แปลงวันที่แบบ Python ให้เป็นภาษาไทย เช่น 12 มิถุนายน 2567 (พุธ)"""
@@ -1814,51 +2023,38 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
     if st.session_state.step == 1:
         # หากยังไม่เลือกแผนก ให้เลือกแผนกก่อน
         if not st.session_state.selected_dept:
-            st.write("### 🏥 กรุณาเลือกแผนกที่ต้องการรับบริการ")
-            
-            col_dept1, col_dept2, col_dept3 = st.columns(3)
-            
-            with col_dept1:
-                st.markdown("""
-                <div class="service-card" style="text-align: center; border-left: 5px solid #7B2CBF; min-height: 180px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <img src="https://img.icons8.com/color/96/tooth.png" width="60" style="margin: 10px auto;"><br>
-                        <h4 style="margin-top: 10px; color: #240046; font-size: 1.1rem; font-weight: 700;">แผนกทันตกรรม</h4>
-                        <p style="font-size: 0.8rem; color: #6C757D; line-height: 1.2;">ตรวจฟัน, อุดฟัน, ถอนฟัน, ขูดหินปูน</p>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("เลือก ทันตกรรม 🦷", use_container_width=True, key="btn_select_dental"):
-                    st.session_state.selected_dept = "dental"
-                    st.rerun()
-                    
-            with col_dept2:
-                st.markdown("""
-                <div class="service-card" style="text-align: center; border-left: 5px solid #2D6A4F; min-height: 180px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <img src="https://img.icons8.com/color/96/mortar-and-pestle.png" width="60" style="margin: 10px auto;"><br>
-                        <h4 style="margin-top: 10px; color: #1B4332; font-size: 1.1rem; font-weight: 700;">แพทย์แผนไทย</h4>
-                        <p style="font-size: 0.8rem; color: #6C757D; line-height: 1.2;">นวดไทย, ประคบร้อน, อบสมุนไพร, พอกเข่า</p>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("เลือก แพทย์แผนไทย 🍃", use_container_width=True, key="btn_select_thai"):
-                    st.session_state.selected_dept = "thai_traditional"
-                    st.rerun()
-                    
-            with col_dept3:
-                st.markdown("""
-                <div class="service-card" style="text-align: center; border-left: 5px solid #0077B6; min-height: 180px; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <img src="https://img.icons8.com/color/96/physical-therapy.png" width="60" style="margin: 10px auto;"><br>
-                        <h4 style="margin-top: 10px; color: #03045E; font-size: 1.1rem; font-weight: 700;">กายภาพบำบัด</h4>
-                        <p style="font-size: 0.8rem; color: #6C757D; line-height: 1.2;">บำบัดลดปวด, กายภาพฟื้นฟูผู้ป่วยอัมพาต</p>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("เลือก กายภาพบำบัด ♿", use_container_width=True, key="btn_select_physical"):
-                    st.session_state.selected_dept = "physical_therapy"
-                    st.rerun()
+            depts_list = fetch_all_departments()
+            if not depts_list:
+                st.info("ℹ️ ขออภัยด้วยค่ะ ปัจจุบันยังไม่มีแผนกที่เปิดให้บริการออนไลน์ในระบบ")
+            else:
+                cols_per_row = 3
+                for row_idx in range(0, len(depts_list), cols_per_row):
+                    cols = st.columns(cols_per_row)
+                    for col_idx, dept_item in enumerate(depts_list[row_idx:row_idx+cols_per_row]):
+                        col = cols[col_idx]
+                        d_key = dept_item["key"]
+                        d_name = dept_item["display_name"]
+                        d_color = dept_item["theme_color"]
+                        d_img = dept_item["banner_img"]
+                        
+                        # ดึงบริการแนะนำของแผนกนี้
+                        dept_services = fetch_services(d_key)
+                        services_preview = ", ".join([s.get("title", "") for s in dept_services[:4]])
+                        if not services_preview:
+                            services_preview = "จองคิวรับบริการทั่วไป"
+                            
+                        col.markdown(f"""
+                        <div class="service-card" style="text-align: center; border-left: 5px solid {d_color}; min-height: 180px; display: flex; flex-direction: column; justify-content: space-between;">
+                            <div>
+                                <img src="{d_img}" width="60" style="margin: 10px auto;"><br>
+                                <h4 style="margin-top: 10px; color: #240046; font-size: 1.1rem; font-weight: 700;">{d_name}</h4>
+                                <p style="font-size: 0.8rem; color: #6C757D; line-height: 1.2;">{services_preview}</p>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        if col.button(f"เลือก {d_name} 👉", use_container_width=True, key=f"btn_select_{d_key}"):
+                            st.session_state.selected_dept = d_key
+                            st.rerun()
         else:
             # ปุ่มย้อนกลับไปหน้าเลือกแผนก
             if st.button("⬅️ เปลี่ยนแผนกบริการ"):
@@ -2190,11 +2386,12 @@ else:
             st.rerun()
             
         # สร้างแท็บควบคุม
-        tab_dash, tab_book, tab_manage, tab_services = st.tabs([
+        tab_dash, tab_book, tab_manage, tab_services, tab_depts = st.tabs([
             "📊 แดชบอร์ด & รายงาน", 
             "📅 เจ้าหน้าที่ลงนัดเอง", 
             "📋 จัดการสิทธิ์การนัดหมาย",
-            "⚙️ ตั้งค่าและบริการ"
+            "⚙️ ตั้งค่าและบริการ",
+            "🏥 จัดการแผนกบริการ"
         ])
         
         # ดึงข้อมูลการนัดหมายทั้งหมด
@@ -2204,18 +2401,19 @@ else:
         with tab_dash:
             st.write("### สรุปตัวเลขและการวิเคราะห์ข้อมูล")
             
+            depts_list = fetch_all_departments()
+            dash_choices = ["รวมทุกแผนก (All Departments)"] + [f"{d['display_name']} ({d['key']})" for d in depts_list]
+            
             dash_dept_filter = st.selectbox(
                 "กรองตามแผนกบริการ:",
-                ["รวมทุกแผนก (All Departments)", "แผนกทันตกรรม (Dental Care)", "แผนกแพทย์แผนไทย (Traditional Thai Medicine)", "แผนกกายภาพบำบัด (Physical Therapy)"],
+                dash_choices,
                 key="dash_dept_select"
             )
-            dash_dept_map = {
-                "รวมทุกแผนก (All Departments)": "all",
-                "แผนกทันตกรรม (Dental Care)": "dental",
-                "แผนกแพทย์แผนไทย (Traditional Thai Medicine)": "thai_traditional",
-                "แผนกกายภาพบำบัด (Physical Therapy)": "physical_therapy"
-            }
-            selected_dash_dept = dash_dept_map[dash_dept_filter]
+            
+            if dash_dept_filter == "รวมทุกแผนก (All Departments)":
+                selected_dash_dept = "all"
+            else:
+                selected_dash_dept = depts_list[dash_choices.index(dash_dept_filter) - 1]["key"]
             
             if not all_apps:
                 st.info("ไม่มีรายการนัดหมายในระบบในขณะนี้")
@@ -2284,17 +2482,19 @@ else:
         with tab_book:
             st.write("### 📅 บันทึกข้อมูลนัดหมายผู้รับบริการ (กรณีโทรมาจอง)")
             
-            staff_dept = st.selectbox(
-                "เลือกแผนกบริการที่ต้องการบันทึกนัดหมาย:",
-                ["แผนกทันตกรรม (Dental Care)", "แผนกแพทย์แผนไทย (Traditional Thai Medicine)", "แผนกกายภาพบำบัด (Physical Therapy)"],
-                key="staff_manual_dept"
-            )
-            staff_dept_map = {
-                "แผนกทันตกรรม (Dental Care)": "dental",
-                "แผนกแพทย์แผนไทย (Traditional Thai Medicine)": "thai_traditional",
-                "แผนกกายภาพบำบัด (Physical Therapy)": "physical_therapy"
-            }
-            selected_staff_dept = staff_dept_map[staff_dept]
+            depts_list = fetch_all_departments()
+            staff_dept_choices = [f"{d['display_name']} ({d['key']})" for d in depts_list]
+            
+            if not depts_list:
+                st.warning("⚠️ ไม่มีแผนกเปิดให้บริการในระบบ")
+                selected_staff_dept = "dental"
+            else:
+                staff_dept = st.selectbox(
+                    "เลือกแผนกบริการที่ต้องการบันทึกนัดหมาย:",
+                    staff_dept_choices,
+                    key="staff_manual_dept"
+                )
+                selected_staff_dept = depts_list[staff_dept_choices.index(staff_dept)]["key"]
             
             with st.form("staff_manual_form"):
                 # ดึงบริการสำหรับแผนกนี้
@@ -2498,17 +2698,19 @@ else:
         with tab_services:
             st.write("### ⚙️ จัดการรายการบริการ (เพิ่ม/แก้ไข/ลบ)")
             
-            manage_dept = st.selectbox(
-                "เลือกแผนกบริการที่ต้องการจัดการ:",
-                ["แผนกทันตกรรม (Dental Care)", "แผนกแพทย์แผนไทย (Traditional Thai Medicine)", "แผนกกายภาพบำบัด (Physical Therapy)"],
-                key="staff_manage_services_dept"
-            )
-            manage_dept_map = {
-                "แผนกทันตกรรม (Dental Care)": "dental",
-                "แผนกแพทย์แผนไทย (Traditional Thai Medicine)": "thai_traditional",
-                "แผนกกายภาพบำบัด (Physical Therapy)": "physical_therapy"
-            }
-            selected_manage_dept = manage_dept_map[manage_dept]
+            depts_list = fetch_all_departments()
+            manage_dept_choices = [f"{d['display_name']} ({d['key']})" for d in depts_list]
+            
+            if not depts_list:
+                st.warning("⚠️ ไม่มีแผนกเปิดให้บริการในระบบ")
+                selected_manage_dept = "dental"
+            else:
+                manage_dept = st.selectbox(
+                    "เลือกแผนกบริการที่ต้องการจัดการ:",
+                    manage_dept_choices,
+                    key="staff_manage_services_dept"
+                )
+                selected_manage_dept = depts_list[manage_dept_choices.index(manage_dept)]["key"]
             
             # โหลดบริการของแผนกที่เลือก
             current_services = fetch_services(selected_manage_dept)
@@ -2911,6 +3113,158 @@ else:
                 GOOGLE_CALENDAR_ID_PHYSICAL = "รหัสปฏิทินกายภาพบำบัด"
                 ```
                 """)
+
+        # --- TAB 5: MANAGE DEPARTMENTS ---
+        with tab_depts:
+            st.write("### 🏥 จัดการแผนกบริการ (เพิ่ม / แก้ไข / ลบ)")
+            
+            depts_in_db = fetch_all_departments()
+            
+            sub_dept_list, sub_dept_add, sub_dept_edit, sub_dept_delete = st.tabs([
+                "📋 รายการแผนกบริการในปัจจุบัน",
+                "➕ เพิ่มแผนกใหม่",
+                "✏️ แก้ไขแผนกที่มีอยู่",
+                "🗑️ ลบแผนกออกจากระบบ"
+            ])
+            
+            with sub_dept_list:
+                st.write("#### รายชื่อแผนกที่เปิดให้บริการผ่านไลน์")
+                if not depts_in_db:
+                    st.info("ไม่มีแผนกในระบบในขณะนี้")
+                else:
+                    for d in depts_in_db:
+                        st.markdown(f"""
+                        <div style="padding: 1rem; border-left: 5px solid {d['theme_color']}; background-color: #F8F9FA; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <img src="{d['banner_img']}" width="40">
+                                <div>
+                                    <strong style="font-size: 1.1rem; color: #240046;">{d['display_name']}</strong><br>
+                                    <span style="font-size: 0.85rem; color: #6C757D;">รหัสอ้างอิง: <code>{d['key']}</code> | รหัสสี: <span style="color: {d['theme_color']}; font-weight: bold;">{d['theme_color']}</span></span>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+            with sub_dept_add:
+                st.write("#### ➕ เพิ่มแผนกบริการใหม่")
+                with st.form("add_dept_form"):
+                    new_dept_key = st.text_input(
+                        "รหัสแผนกภาษาอังกฤษ (เช่น pediatrics, general_medicine):", 
+                        placeholder="ห้ามมีช่องว่าง ใช้ภาษาอังกฤษตัวเล็กเท่านั้น"
+                    ).strip().lower()
+                    
+                    new_dept_name = st.text_input(
+                        "ชื่อแผนกบริการภาษาไทย (เช่น แผนกกุมารเวชกรรม, คลินิกโรคทั่วไป):", 
+                        placeholder="ระบุชื่อภาษาไทยที่แสดงให้คนไข้เห็น"
+                    )
+                    
+                    new_dept_color = st.color_picker("เลือกสีหลักของแผนก (Theme Color):", value="#7B2CBF")
+                    
+                    icon_options = {
+                        "🏥 โรงพยาบาล/บริการทั่วไป": "https://img.icons8.com/color/144/hospital.png",
+                        "🦷 ทันตกรรม (ฟัน)": "https://img.icons8.com/color/144/tooth.png",
+                        "🍃 แพทย์แผนไทย (ครกสมุนไพร)": "https://img.icons8.com/color/144/mortar-and-pestle.png",
+                        "♿ กายภาพบำบัด (วีลแชร์)": "https://img.icons8.com/color/144/physical-therapy.png",
+                        "💉 วัคซีน (เข็มฉีดยา)": "https://img.icons8.com/color/144/syringe.png",
+                        "💊 ร้านขายยา/เภสัช": "https://img.icons8.com/color/144/pill.png",
+                        "❤️ หัวใจ/ตรวจสุขภาพ": "https://img.icons8.com/color/144/heart-monitor.png"
+                    }
+                    
+                    selected_preset = st.selectbox("เลือกไอคอนแผนกจากรายการแนะนำ:", list(icon_options.keys()))
+                    custom_dept_img = st.text_input(
+                        "หรือระบุ URL รูปภาพไอคอนอื่นๆ (เว้นว่างไว้จะใช้ไอคอนแนะนำที่เลือกด้านบน):",
+                        placeholder="https://..."
+                    ).strip()
+                    
+                    add_dept_submitted = st.form_submit_button("➕ บันทึกแผนกใหม่", use_container_width=True)
+                    if add_dept_submitted:
+                        final_img = custom_dept_img if custom_dept_img else icon_options[selected_preset]
+                        if not new_dept_key or not new_dept_name:
+                            st.error("❌ กรุณากรอกรหัสแผนกและชื่อแผนกบริการให้ครบถ้วน")
+                        elif not new_dept_key.isalnum() and "_" not in new_dept_key:
+                            st.error("❌ รหัสแผนกต้องประกอบด้วยตัวอักษรภาษาอังกฤษหรือตัวเลข และเครื่องหมาย _ เท่านั้น")
+                        else:
+                            success, message = create_department_db(new_dept_key, new_dept_name, new_dept_color, final_img)
+                            if success:
+                                st.success(f"🟢 {message}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {message}")
+                                
+            with sub_dept_edit:
+                st.write("#### ✏️ แก้ไขแผนกบริการที่มีอยู่")
+                if not depts_in_db:
+                    st.info("ไม่มีแผนกให้แก้ไขในระบบ")
+                else:
+                    edit_dept_options = {f"{d['display_name']} ({d['key']})": d for d in depts_in_db}
+                    selected_edit_label = st.selectbox(
+                        "เลือกแผนกที่ต้องการแก้ไข:",
+                        list(edit_dept_options.keys()),
+                        key="sb_edit_dept_select"
+                    )
+                    selected_edit_dept = edit_dept_options[selected_edit_label]
+                    
+                    with st.form("edit_dept_form"):
+                        edit_dept_name = st.text_input(
+                            "ชื่อแผนกบริการภาษาไทย:", 
+                            value=selected_edit_dept.get("display_name", "")
+                        )
+                        edit_dept_color = st.color_picker(
+                            "สีธีมหลักของแผนก:", 
+                            value=selected_edit_dept.get("theme_color", "#7B2CBF")
+                        )
+                        edit_dept_img = st.text_input(
+                            "ลิงก์ URL รูปภาพไอคอนแผนก:", 
+                            value=selected_edit_dept.get("banner_img", "")
+                        )
+                        
+                        edit_dept_submitted = st.form_submit_button("✏️ บันทึกการแก้ไขแผนก", use_container_width=True)
+                        if edit_dept_submitted:
+                            if not edit_dept_name.strip():
+                                st.error("❌ กรุณากรอกชื่อแผนกบริการ")
+                            else:
+                                success, message = update_department_db(
+                                    selected_edit_dept["key"],
+                                    edit_dept_name.strip(),
+                                    edit_dept_color,
+                                    edit_dept_img.strip()
+                                )
+                                if success:
+                                    st.success(f"🟢 {message}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {message}")
+                                    
+            with sub_dept_delete:
+                st.write("#### 🗑️ ลบแผนกออกจากระบบ")
+                if not depts_in_db:
+                    st.info("ไม่มีแผนกให้ลบในขณะนี้")
+                else:
+                    del_dept_options = {f"{d['display_name']} ({d['key']})": d for d in depts_in_db}
+                    selected_del_label = st.selectbox(
+                        "เลือกแผนกที่ต้องการลบ:",
+                        list(del_dept_options.keys()),
+                        key="sb_del_dept_select"
+                    )
+                    selected_del_dept = del_dept_options[selected_del_label]
+                    
+                    st.warning(f"⚠️ การดำเนินการนี้จะลบแผนก '{selected_del_dept['display_name']}' ออกจากตารางตั้งค่า และจะลบข้อมูลบริการรักษาทั้งหมดที่เกี่ยวข้องกับแผนกนี้! โปรดตรวจสอบให้แน่ใจก่อนทำการลบ")
+                    
+                    confirm_del_text = st.text_input(
+                        f"พิมพ์คำว่า `{selected_del_dept['key']}` ในช่องด้านล่างเพื่อยืนยันสิทธิ์การลบ:",
+                        placeholder="พิมพ์เพื่อยืนยัน"
+                    ).strip().lower()
+                    
+                    if st.button("🗑️ ยืนยันการลบแผนกบริการ", type="primary", use_container_width=True):
+                        if confirm_del_text != selected_del_dept['key']:
+                            st.error("❌ คำยืนยันไม่ถูกต้อง กรุณากรอกรหัสแผนกบริการให้ตรงกัน")
+                        else:
+                            success, message = delete_department_db(selected_del_dept['key'])
+                            if success:
+                                st.success(f"🟢 {message}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {message}")
 
 # ----------------- Footer -----------------
 st.divider()
