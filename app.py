@@ -2943,34 +2943,65 @@ else:
                             "ประเภทบริการ", "วันที่นัดหมาย", "เวลานัด", "หมายเหตุ"
                         ]
                         
-                        st.dataframe(df_show_display, use_container_width=True, hide_index=True)
+                        # แทรกคอลัมน์เลือกสำหรับการเลือกลบแบบกลุ่ม (Bulk Delete)
+                        df_show_display.insert(0, "เลือก", False)
+                        
+                        edited_df = st.data_editor(
+                            df_show_display,
+                            use_container_width=True,
+                            hide_index=True,
+                            disabled=["รหัสนัด", "แผนก", "ชื่อ-นามสกุล", "เบอร์โทร", "เลขบัตรประชาชน", "ประเภทบริการ", "วันที่นัดหมาย", "เวลานัด", "หมายเหตุ"]
+                        )
+                        
+                        selected_rows = edited_df[edited_df["เลือก"] == True]
                         
                         # ส่วนยกเลิกคิวนัดหมาย
                         st.divider()
-                        st.write("#### 🗑️ ยกเลิกคิวนัดหมายผู้เข้าบริการ")
+                        st.write("#### 🗑️ ยกเลิกและลบคิวนัดหมายผู้เข้าบริการ")
                         
-                        # ตัวเลือกสำหรับการยกเลิก
-                        cancel_options = {
-                            f"รหัส #{row['id']} - คุณ{row['name']} (วันที่ {row['appointment_date']} เวลา {row['appointment_time']})": row['id']
-                            for _, row in df_show.iterrows()
-                        }
-                        
-                        if cancel_options:
-                            selected_cancel_label = st.selectbox(
-                                "เลือกนัดหมายที่ต้องการลบออกจากระบบ:",
-                                list(cancel_options.keys())
-                            )
-                            selected_cancel_id = cancel_options[selected_cancel_label]
-                            
-                            if st.button("ยืนยันยกเลิกและเปิดเวลากลับคืนระบบ 🗑️", type="primary", use_container_width=True):
-                                success, message = cancel_appointment_db(selected_cancel_id)
-                                if success:
-                                    st.session_state.toast_notification = {"message": f"ยกเลิกนัดหมายสำเร็จและเปิดสล็อตเวลากลับคืนระบบเรียบร้อยแล้ว! 🗑️", "icon": "✅"}
+                        if not selected_rows.empty:
+                            st.warning(f"⚠️ คุณกำลังจะลบคิวนัดหมายที่เลือกจำนวน {len(selected_rows)} รายการ การลบนี้จะเปิดเวลากลับคืนระบบเพื่อให้ผู้อื่นจองใหม่ได้")
+                            if st.button(f"ยืนยันลบรายการที่เลือกทั้งหมด ({len(selected_rows)} รายการ) 🗑️", type="primary", use_container_width=True):
+                                success_count = 0
+                                fail_count = 0
+                                fail_messages = []
+                                
+                                for _, row in selected_rows.iterrows():
+                                    app_id = int(row["รหัสนัด"])
+                                    # ดึงข้อมูลก่อนลบเพื่อใช้ส่งไลน์ OA
+                                    app_data = fetch_appointment_by_id(app_id)
+                                    
+                                    success, message = cancel_appointment_db(app_id)
+                                    if success:
+                                        success_count += 1
+                                        # แจ้งเตือนผู้รับบริการทาง LINE OA
+                                        if app_data and app_data.get("user_id") and app_data.get("user_id") != "NON_LINE_USER" and not app_data.get("user_id").startswith("STAFF"):
+                                            dept_name_th = DEPT_THEMES.get(app_data.get("department", ""), {}).get("title_thai", "บริการทั่วไป")
+                                            if not dept_name_th.startswith("แผนก"):
+                                                dept_name_th = f"แผนก{dept_name_th}"
+                                            try:
+                                                date_obj = datetime.date.fromisoformat(app_data.get("appointment_date", ""))
+                                                thai_date_str = format_thai_date(date_obj)
+                                            except Exception:
+                                                thai_date_str = app_data.get("appointment_date", "")
+                                            time_str = ":".join(str(app_data.get("appointment_time", "")).split(":")[:2])
+                                            
+                                            cancel_msg = f"แจ้งเตือน: นัดหมาย {dept_name_th} วันที่ {thai_date_str} เวลา {time_str} น. ของท่าน ได้รับการยกเลิกโดยเจ้าหน้าที่เรียบร้อยแล้วค่ะ"
+                                            send_line_push_message(app_data.get("user_id"), cancel_msg)
+                                    else:
+                                        fail_count += 1
+                                        fail_messages.append(f"รหัส #{app_id}: {message}")
+                                
+                                if success_count > 0:
+                                    msg_text = f"ยกเลิกนัดหมายสำเร็จ {success_count} รายการ และเปิดสล็อตเวลากลับคืนระบบเรียบร้อยแล้ว!"
+                                    st.session_state.toast_notification = {"message": msg_text, "icon": "✅"}
+                                    if fail_count > 0:
+                                        st.warning(f"ลบล้มเหลว {fail_count} รายการ:\n" + "\n".join(fail_messages))
                                     st.rerun()
-                                else:
-                                    st.error(f"ไม่สามารถดำเนินการลบได้เนื่องจาก: {message}")
+                                elif fail_count > 0:
+                                    st.error(f"ไม่สามารถดำเนินการลบได้เนื่องจาก:\n" + "\n".join(fail_messages))
                         else:
-                            st.caption("ไม่มีรายการให้ยกเลิก")
+                            st.info("💡 กรุณาติ๊กเลือกช่อง 'เลือก' ที่แถวด้านซ้ายมือสุดของตาราง เพื่อเลือกรายการที่ต้องการลบ")
  
         # --- TAB 4: MANAGE SERVICES ---
         with tab_services:
