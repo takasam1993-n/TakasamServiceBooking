@@ -244,7 +244,12 @@ dept_cal_map = {
 }
 
 # Staff Portal Config
-staff_password = str(st.secrets.get("STAFF_PASSWORD") or st.secrets.get("staff_password") or "1234").strip()
+gcal_creds = st.secrets.get("google_calendar_credentials", {})
+if isinstance(gcal_creds, dict):
+    nested_pass = gcal_creds.get("STAFF_PASSWORD") or gcal_creds.get("staff_password")
+else:
+    nested_pass = getattr(gcal_creds, "STAFF_PASSWORD", None) or getattr(gcal_creds, "staff_password", None)
+staff_password = str(st.secrets.get("STAFF_PASSWORD") or st.secrets.get("staff_password") or nested_pass or "1234").strip()
 
 # LINE LIFF URL Config
 liff_url = f"https://liff.line.me/{liff_id}" if (liff_id and "xxxxxxxx" not in liff_id) else "https://line.me"
