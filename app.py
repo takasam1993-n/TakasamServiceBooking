@@ -764,6 +764,185 @@ def format_thai_date(date_obj):
     
     return f"{day} {month} {year} ({day_of_week})"
 
+def fetch_appointment_by_id(app_id):
+    """ดึงข้อมูลการนัดหมายตาม ID"""
+    if is_demo:
+        cleaned_id = str(app_id).replace("DEMO-", "")
+        for app in st.session_state.mock_db["appointments"]:
+            if str(app.get("id")) == cleaned_id:
+                return app
+        return None
+    if not supabase_client:
+        return None
+    try:
+        response = supabase_client.table("appointments").select("*").eq("id", app_id).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย {app_id}: {e}")
+        return None
+
+def render_appointment_details_view(app_id):
+    st.markdown("""
+    <div style="text-align: center; margin-bottom: 1.5rem;">
+        <h2 style="color: #5A2A94; font-weight: 800;">🏥 รายละเอียดการนัดหมาย</h2>
+        <p style="color: #666;">ข้อมูลการนัดหมายเข้าจองคิวรับบริการ รพ.สต.ท่าเกษม</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.spinner("กำลังโหลดข้อมูลการนัดหมาย..."):
+        app = fetch_appointment_by_id(app_id)
+        
+    if not app:
+        st.error("❌ ไม่พบข้อมูลการนัดหมายนี้ หรือการนัดหมายอาจถูกยกเลิกไปแล้ว")
+        if st.button("⬅️ กลับสู่หน้าลงทะเบียนจองคิวใหม่", use_container_width=True):
+            st.query_params.clear()
+            st.rerun()
+        return
+        
+    # Get department details
+    dept = app.get("department", "")
+    dept_theme = DEPT_THEMES.get(dept, DEPT_THEMES[""])
+    dept_name = dept_theme.get("title_thai", "บริการทั่วไป")
+    if not dept_name.startswith("แผนก"):
+        dept_name = f"แผนก{dept_name}"
+        
+    # Format date and time
+    raw_date = app.get("appointment_date", "")
+    try:
+        date_obj = datetime.date.fromisoformat(raw_date)
+        thai_date_str = format_thai_date(date_obj)
+    except Exception:
+        thai_date_str = raw_date
+        
+    raw_time = app.get("appointment_time", "")
+    time_str = ":".join(str(raw_time).split(":")[:2])
+    q_num = get_queue_number(time_str)
+    
+    st.markdown(f"""
+    <div class="success-box" style="text-align: center; padding: 1.5rem; background-color: #E8F5E9; border-radius: 12px; margin-bottom: 1.5rem; border-left: 6px solid #2D6A4F;">
+        <h3 style="margin: 0; color: #1B4332;">📅 ยืนยันสิทธิ์การนัดหมาย</h3>
+        <p style="margin-top: 0.5rem; margin-bottom: 0.2rem; font-size: 1.4rem; color: {dept_theme['primary']};"><b>ลำดับคิวของคุณคือ: คิวที่ {q_num}</b></p>
+        <p style="margin-top: 0rem; margin-bottom: 0; color: #666; font-size: 0.9rem;">รหัสอ้างอิงการจองคิว: #{app.get('id')}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"""
+    <div style="background-color: white; padding: 1.2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 1.5rem; border-left: 5px solid {dept_theme['primary']};">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">แผนกบริการ:</span>
+            <span style="text-align: right; font-weight: bold; color: {dept_theme['primary']}; word-break: break-word; flex-grow: 1; padding-left: 10px;">{dept_name}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">ประเภทบริการ:</span>
+            <span style="text-align: right; font-weight: bold; color: {dept_theme['primary']}; word-break: break-word; flex-grow: 1; padding-left: 10px;">{app.get('service_type', '')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">ชื่อผู้รับบริการ:</span>
+            <span style="text-align: right; word-break: break-word; flex-grow: 1; padding-left: 10px;">{app.get('name', '')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">เบอร์โทรติดต่อ:</span>
+            <span style="text-align: right; word-break: break-word; flex-grow: 1; padding-left: 10px;">{app.get('phone', '')}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">วันที่นัดหมาย:</span>
+            <span style="text-align: right; font-weight: bold; word-break: break-word; flex-grow: 1; padding-left: 10px;">{thai_date_str}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">เวลานัดหมาย:</span>
+            <span style="text-align: right; font-weight: bold; color: {dept_theme['primary']}; word-break: break-word; flex-grow: 1; padding-left: 10px;">{time_str} น.</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0;">
+            <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">หมายเหตุ/อาการ:</span>
+            <span style="text-align: right; word-break: break-word; flex-grow: 1; padding-left: 10px;">{app.get('note', '') or '-'}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style="background-color: #E8F1F2; padding: 1rem; border-radius: 8px; font-size: 0.9rem; color: #1D3557; margin-bottom: 1.5rem;">
+        <b>💡 ข้อแนะนำในการเข้ารับบริการ:</b>
+        <ul style="margin: 0.5rem 0 0 1rem; padding: 0;">
+            <li>กรุณาเดินทางมาถึง รพ.สต.ท่าเกษม ก่อนเวลานัดหมายอย่างน้อย 15 นาที</li>
+            <li>กรุณานำ<b>บัตรประจำตัวประชาชนตัวจริง</b>มาด้วยในวันนัดหมาย</li>
+            <li>หากต้องการยกเลิกหรือเลื่อนนัดหมาย กรุณาติดต่อล่วงหน้าอย่างน้อย 1 วัน</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Google Calendar URL Generator
+    try:
+        date_formatted = date_obj.strftime("%Y%m%d")
+        hour_str, min_str = time_str.split(":")
+        start_dt = f"{date_formatted}T{hour_str}{min_str}00"
+        end_time_min = int(min_str) + 30
+        end_time_hour = int(hour_str)
+        if end_time_min >= 60:
+            end_time_min -= 60
+            end_time_hour += 1
+        end_dt = f"{date_formatted}T{end_time_hour:02d}{end_time_min:02d}00"
+        
+        title = f"นัดหมาย{dept_name} [#{app.get('id')}]: {app.get('service_type')}"
+        details = f"รหัสอ้างอิงการจองคิว: #{app.get('id')}\nแผนก: {dept_name}\nประเภทบริการ: {app.get('service_type')}\nผู้เข้ารับบริการ: {app.get('name')}\nเบอร์โทรศัพท์ติดต่อ: {app.get('phone')}\n\nรพ.สต.ท่าเกษม ใส่ใจสุขภาพ เคียงข้างประชาชน"
+        location = "รพ.สต.ท่าเกษม อ.เมืองสระแก้ว จ.สระแก้ว"
+        
+        active_calendar_id = dept_cal_map.get(dept, "")
+        gcal_url = f"https://calendar.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote(title)}&dates={start_dt}/{end_dt}&details={urllib.parse.quote(details)}&location={urllib.parse.quote(location)}"
+        if active_calendar_id:
+            gcal_url += f"&src={urllib.parse.quote(active_calendar_id)}"
+    except Exception:
+        gcal_url = None
+
+    # Actions buttons
+    col1, col2 = st.columns(2)
+    with col1:
+        if gcal_url:
+            st.markdown(f'<a href="{gcal_url}" target="_blank" style="text-decoration: none;"><button style="width:100%; height:45px; background-color:#4285F4; color:white; border-radius:10px; font-weight:600; border:none;">📅 บันทึกในปฏิทิน Google</button></a>', unsafe_allow_html=True)
+        else:
+            st.button("📅 บันทึกในปฏิทิน (ไม่พร้อมใช้งาน)", disabled=True, use_container_width=True)
+            
+    with col2:
+        if st.button("⬅️ กลับสู่หน้าลงทะเบียนใหม่", use_container_width=True):
+            st.query_params.clear()
+            st.rerun()
+            
+    st.divider()
+    
+    # Cancel Button
+    if "confirm_cancel_id" in st.session_state and st.session_state.confirm_cancel_id == app_id:
+        st.warning("⚠️ คุณต้องการยกเลิกการนัดหมายนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถเรียกคืนได้")
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            if st.button("ยืนยันยกเลิกนัดหมาย 🛑", use_container_width=True):
+                with st.spinner("กำลังดำเนินการยกเลิก..."):
+                    success, msg = cancel_appointment_db(app_id)
+                if success:
+                    st.toast("ยกเลิกการนัดหมายสำเร็จแล้ว", icon="✅")
+                    # Clear query params and session state
+                    st.query_params.clear()
+                    if "confirm_cancel_id" in st.session_state:
+                        del st.session_state.confirm_cancel_id
+                    st.success("🎉 ยกเลิกการนัดหมายสำเร็จแล้ว ระบบจะนำคุณกลับหน้าหลักใน 3 วินาที...")
+                    
+                    # Try to send cancel LINE notification if token is available
+                    if app.get("user_id") and app.get("user_id") != "NON_LINE_USER" and not app.get("user_id").startswith("STAFF"):
+                        cancel_msg = f"แจ้งเตือน: นัดหมาย {dept_name} วันที่ {thai_date_str} เวลา {time_str} น. ของท่าน ได้รับการยกเลิกเรียบร้อยแล้วค่ะ"
+                        send_line_push_message(app.get("user_id"), cancel_msg)
+                        
+                    import time
+                    time.sleep(3)
+                    st.rerun()
+                else:
+                    st.error(f"ไม่สามารถยกเลิกได้: {msg}")
+        with cc2:
+            if st.button("ยกเลิก ✖️", use_container_width=True):
+                del st.session_state.confirm_cancel_id
+                st.rerun()
+    else:
+        if st.button("❌ ยกเลิกการนัดหมายนี้", use_container_width=True):
+            st.session_state.confirm_cancel_id = app_id
+            st.rerun()
+
 def validate_thai_cid(cid):
     """ตรวจสอบเลขบัตรประจำตัวประชาชน 13 หลัก"""
     if not cid or len(cid) != 13 or not cid.isdigit():
@@ -1541,7 +1720,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                     "action": {
                         "type": "uri",
                         "label": "ดูรายละเอียดการนัด",
-                        "uri": liff_url
+                        "uri": f"{liff_url}?app_id={appointment_id}" if (appointment_id and liff_url != "https://line.me") else liff_url
                     },
                     "contents": [
                         {
@@ -2066,6 +2245,12 @@ def render_liff_login(liff_id):
 if app_mode == "ผู้รับบริการ (LINE LIFF)":
     # 1. LINE LIFF Login Integration
     render_liff_login(liff_id)
+    
+    # ตรวจสอบการเรียกดูรายละเอียดการนัดหมาย
+    view_app_id = st.query_params.get("app_id")
+    if view_app_id:
+        render_appointment_details_view(view_app_id)
+        st.stop()
     
     # 2. Main title & banner
     st.markdown(f"""

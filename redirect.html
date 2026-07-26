@@ -54,6 +54,13 @@
         document.getElementById("status").innerText = "เข้าสู่ระบบสำเร็จ กำลังส่งข้อมูลไปยังแอปจอง...";
         liff.getProfile().then((profile) => {
           const redirectUrl = new URL(STREAMLIT_APP_URL);
+          
+          // ส่งต่อค่า Query Parameters ทั้งหมด (เช่น app_id) ไปยัง Streamlit
+          const currentUrlParams = new URLSearchParams(window.location.search);
+          for (const [key, value] of currentUrlParams) {
+            redirectUrl.searchParams.set(key, value);
+          }
+          
           redirectUrl.searchParams.set("userId", profile.userId);
           redirectUrl.searchParams.set("displayName", profile.displayName);
           if (profile.pictureUrl) {
