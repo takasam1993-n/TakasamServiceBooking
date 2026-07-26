@@ -1059,7 +1059,7 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
     except Exception as e:
         return False, f"เกิดข้อผิดพลาดในการบันทึก: {e}"
 
-def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, name, dept):
+def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, name, dept, appointment_id=None, phone=None):
     """สร้างโครงสร้าง JSON Flex Message ตามตัวอย่างใบประชาสัมพันธ์ของ รพ.สต.ท่าเกษม"""
     thai_date_str = format_thai_date(app_date)
     time_str = ":".join(str(app_time).split(":")[:2])
@@ -1112,6 +1112,262 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
     
     cfg = DEPT_CONFIGS.get(dept, DEPT_CONFIGS["dental"])
     
+    ref_id = ""
+    if appointment_id is not None:
+        if isinstance(appointment_id, int) or (isinstance(appointment_id, str) and appointment_id.isdigit()):
+            ref_id = f"#{appointment_id}"
+        else:
+            ref_id = str(appointment_id)
+
+    contents_list = [
+        {
+            "type": "box",
+            "layout": "horizontal",
+            "alignItems": "center",
+            "contents": [
+                {
+                    "type": "image",
+                    "url": cfg["calendar_icon"],
+                    "size": "xxs",
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": "วันที่นัด",
+                    "color": "#666666",
+                    "size": "sm",
+                    "flex": 3,
+                    "margin": "md"
+                },
+                {
+                    "type": "text",
+                    "text": thai_date_str,
+                    "weight": "bold",
+                    "size": "sm",
+                    "color": "#240046",
+                    "flex": 6,
+                    "wrap": True
+                }
+            ]
+        },
+        {
+            "type": "box",
+            "layout": "horizontal",
+            "alignItems": "center",
+            "contents": [
+                {
+                    "type": "image",
+                    "url": cfg["clock_icon"],
+                    "size": "xxs",
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": "เวลานัด",
+                    "color": "#666666",
+                    "size": "sm",
+                    "flex": 3,
+                    "margin": "md"
+                },
+                {
+                    "type": "text",
+                    "text": f"{time_str} น.",
+                    "weight": "bold",
+                    "size": "sm",
+                    "color": "#240046",
+                    "flex": 6
+                }
+            ]
+        },
+        {
+            "type": "box",
+            "layout": "horizontal",
+            "alignItems": "center",
+            "contents": [
+                {
+                    "type": "image",
+                    "url": "https://img.icons8.com/color/96/numbered-list.png",
+                    "size": "xxs",
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": "ลำดับคิว",
+                    "color": "#666666",
+                    "size": "sm",
+                    "flex": 3,
+                    "margin": "md"
+                },
+                {
+                    "type": "text",
+                    "text": f"คิวที่ {q_num}",
+                    "weight": "bold",
+                    "size": "sm",
+                    "color": cfg["primary"],
+                    "flex": 6
+                }
+            ]
+        }
+    ]
+
+    if ref_id:
+        contents_list.append({
+            "type": "box",
+            "layout": "horizontal",
+            "alignItems": "center",
+            "contents": [
+                {
+                    "type": "image",
+                    "url": "https://img.icons8.com/color/96/hash.png",
+                    "size": "xxs",
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": "รหัสอ้างอิง",
+                    "color": "#666666",
+                    "size": "sm",
+                    "flex": 3,
+                    "margin": "md"
+                },
+                {
+                    "type": "text",
+                    "text": ref_id,
+                    "weight": "bold",
+                    "size": "sm",
+                    "color": "#240046",
+                    "flex": 6
+                }
+            ]
+        })
+
+    contents_list.append({
+        "type": "box",
+        "layout": "horizontal",
+        "alignItems": "center",
+        "contents": [
+            {
+                "type": "image",
+                "url": cfg["logo_icon"],
+                "size": "xxs",
+                "flex": 1
+            },
+            {
+                "type": "text",
+                "text": "บริการ",
+                "color": "#666666",
+                "size": "sm",
+                "flex": 3,
+                "margin": "md"
+            },
+            {
+                "type": "text",
+                "text": service,
+                "weight": "bold",
+                "size": "sm",
+                "color": "#240046",
+                "flex": 6,
+                "wrap": True
+            }
+        ]
+    })
+
+    contents_list.append({
+        "type": "box",
+        "layout": "horizontal",
+        "alignItems": "center",
+        "contents": [
+            {
+                "type": "image",
+                "url": cfg["user_icon"],
+                "size": "xxs",
+                "flex": 1
+            },
+            {
+                "type": "text",
+                "text": "ชื่อผู้รับบริการ",
+                "color": "#666666",
+                "size": "sm",
+                "flex": 3,
+                "margin": "md"
+            },
+            {
+                "type": "text",
+                "text": name,
+                "weight": "bold",
+                "size": "sm",
+                "color": "#240046",
+                "flex": 6,
+                "wrap": True
+            }
+        ]
+    })
+
+    if phone:
+        contents_list.append({
+            "type": "box",
+            "layout": "horizontal",
+            "alignItems": "center",
+            "contents": [
+                {
+                    "type": "image",
+                    "url": "https://img.icons8.com/color/96/phone.png",
+                    "size": "xxs",
+                    "flex": 1
+                },
+                {
+                    "type": "text",
+                    "text": "เบอร์โทรติดต่อ",
+                    "color": "#666666",
+                    "size": "sm",
+                    "flex": 3,
+                    "margin": "md"
+                },
+                {
+                    "type": "text",
+                    "text": phone,
+                    "weight": "bold",
+                    "size": "sm",
+                    "color": "#240046",
+                    "flex": 6
+                }
+            ]
+        })
+
+    dept_title = cfg["title_en"]
+    if not dept_title.startswith("แผนก"):
+        dept_title = f"แผนก{dept_title}"
+    contents_list.append({
+        "type": "box",
+        "layout": "horizontal",
+        "alignItems": "center",
+        "contents": [
+            {
+                "type": "image",
+                "url": "https://img.icons8.com/color/96/hospital.png",
+                "size": "xxs",
+                "flex": 1
+            },
+            {
+                "type": "text",
+                "text": "สถานที่",
+                "color": "#666666",
+                "size": "sm",
+                "flex": 3,
+                "margin": "md"
+            },
+            {
+                "type": "text",
+                "text": f"{dept_title} รพ.สต.ท่าเกษม",
+                "weight": "bold",
+                "size": "sm",
+                "color": "#240046",
+                "flex": 6,
+                "wrap": True
+            }
+        ]
+    })
+
     return {
         "type": "bubble",
         "size": "mega",
@@ -1227,156 +1483,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                     "layout": "vertical",
                     "margin": "md",
                     "spacing": "sm",
-                    "contents": [
-                        {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "alignItems": "center",
-                            "contents": [
-                                {
-                                    "type": "image",
-                                    "url": cfg["calendar_icon"],
-                                    "size": "xxs",
-                                    "flex": 1
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "วันที่นัด",
-                                    "color": "#666666",
-                                    "size": "sm",
-                                    "flex": 3,
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": thai_date_str,
-                                    "weight": "bold",
-                                    "size": "sm",
-                                    "color": "#240046",
-                                    "flex": 6,
-                                    "wrap": True
-                                }
-                            ]
-                        },
-                        {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "alignItems": "center",
-                            "contents": [
-                                {
-                                    "type": "image",
-                                    "url": cfg["clock_icon"],
-                                    "size": "xxs",
-                                    "flex": 1
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "เวลานัด",
-                                    "color": "#666666",
-                                    "size": "sm",
-                                    "flex": 3,
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": f"{time_str} น.",
-                                    "weight": "bold",
-                                    "size": "sm",
-                                    "color": "#240046",
-                                    "flex": 6
-                                }
-                            ]
-                        },
-                        {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "alignItems": "center",
-                            "contents": [
-                                {
-                                    "type": "image",
-                                    "url": "https://img.icons8.com/color/96/numbered-list.png",
-                                    "size": "xxs",
-                                    "flex": 1
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "ลำดับคิว",
-                                    "color": "#666666",
-                                    "size": "sm",
-                                    "flex": 3,
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": f"คิวที่ {q_num}",
-                                    "weight": "bold",
-                                    "size": "sm",
-                                    "color": cfg["primary"],
-                                    "flex": 6
-                                }
-                            ]
-                        },
-                        {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "alignItems": "center",
-                            "contents": [
-                                {
-                                    "type": "image",
-                                    "url": cfg["logo_icon"],
-                                    "size": "xxs",
-                                    "flex": 1
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "บริการ",
-                                    "color": "#666666",
-                                    "size": "sm",
-                                    "flex": 3,
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": service,
-                                    "weight": "bold",
-                                    "size": "sm",
-                                    "color": "#240046",
-                                    "flex": 6,
-                                    "wrap": True
-                                }
-                            ]
-                        },
-                        {
-                            "type": "box",
-                            "layout": "horizontal",
-                            "alignItems": "center",
-                            "contents": [
-                                {
-                                    "type": "image",
-                                    "url": cfg["user_icon"],
-                                    "size": "xxs",
-                                    "flex": 1
-                                },
-                                {
-                                    "type": "text",
-                                    "text": "ชื่อผู้รับบริการ",
-                                    "color": "#666666",
-                                    "size": "sm",
-                                    "flex": 3,
-                                    "margin": "md"
-                                },
-                                {
-                                    "type": "text",
-                                    "text": name,
-                                    "weight": "bold",
-                                    "size": "sm",
-                                    "color": "#240046",
-                                    "flex": 6,
-                                    "wrap": True
-                                }
-                            ]
-                        }
-                    ]
+                    "contents": contents_list
                 },
                 {
                     "type": "box",
@@ -1503,7 +1610,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
         }
     }
 
-def send_line_flex_message(user_id, service, app_date, app_time, name, dept):
+def send_line_flex_message(user_id, service, app_date, app_time, name, dept, appointment_id=None, phone=None):
     """ส่ง Flex Message ยืนยันการนัดหมายผ่าน LINE"""
     if not line_channel_access_token or "xxxxxxxx" in line_channel_access_token:
         st.info("💡 (โครงสร้าง Webhook) ระบบพร้อมเชื่อมต่อไปยัง LINE Messaging API เพื่อส่ง Flex Message คอนเฟิร์ม")
@@ -1522,7 +1629,9 @@ def send_line_flex_message(user_id, service, app_date, app_time, name, dept):
         app_date=app_date,
         app_time=app_time,
         name=name,
-        dept=dept
+        dept=dept,
+        appointment_id=appointment_id,
+        phone=phone
     )
     
     payload = {
@@ -1543,7 +1652,7 @@ def send_line_flex_message(user_id, service, app_date, app_time, name, dept):
         st.error(f"เกิดข้อผิดพลาดในการส่ง LINE Flex Message: {e}")
         return False
 
-def send_line_reminder_flex(user_id, service, app_date, app_time, name, dept):
+def send_line_reminder_flex(user_id, service, app_date, app_time, name, dept, appointment_id=None, phone=None):
     """ส่ง Flex Message แจ้งเตือนคนไข้ล่วงหน้า 1 ชั่วโมงผ่าน LINE"""
     if not line_channel_access_token or "xxxxxxxx" in line_channel_access_token:
         thai_date = format_thai_date(app_date)
@@ -1563,7 +1672,9 @@ def send_line_reminder_flex(user_id, service, app_date, app_time, name, dept):
         app_date=app_date,
         app_time=app_time,
         name=name,
-        dept=dept
+        dept=dept,
+        appointment_id=appointment_id,
+        phone=phone
     )
     
     payload = {
@@ -1780,7 +1891,17 @@ def run_reminder_check():
                     if time_min <= app_time_obj <= time_max:
                         user_id = app.get("user_id", "")
                         if user_id and user_id != "NON_LINE_USER":
-                            send_line_reminder_flex(user_id, app["service_type"], app["appointment_date"], app["appointment_time"], app["name"], app.get("department", "dental"))
+                            demo_app_id = f"DEMO-{app.get('id', 0):04d}"
+                            send_line_reminder_flex(
+                                user_id=user_id,
+                                service=app["service_type"],
+                                app_date=app["appointment_date"],
+                                app_time=app["appointment_time"],
+                                name=app["name"],
+                                dept=app.get("department", "dental"),
+                                appointment_id=demo_app_id,
+                                phone=app.get("phone")
+                            )
                             app["reminder_sent"] = True
                             st.sidebar.toast(f"🔔 แจ้งเตือนคิวล่วงหน้า: ส่งการ์ด LINE เตือนคุณ {app['name']} แล้ว")
                 except Exception as e:
@@ -1805,7 +1926,16 @@ def run_reminder_check():
                     if time_min <= app_time_obj <= time_max:
                         user_id = row.get("user_id", "")
                         if user_id and user_id != "NON_LINE_USER":
-                            if send_line_reminder_flex(user_id, row["service_type"], row["appointment_date"], row["appointment_time"], row["name"], row.get("department", "dental")):
+                            if send_line_reminder_flex(
+                                user_id=user_id,
+                                service=row["service_type"],
+                                app_date=row["appointment_date"],
+                                app_time=row["appointment_time"],
+                                name=row["name"],
+                                dept=row.get("department", "dental"),
+                                appointment_id=row.get("id"),
+                                phone=row.get("phone")
+                            ):
                                 # อัปเดตสถานะใน Supabase เพื่อไม่ให้ส่งเตือนซ้ำ
                                 supabase_client.table("appointments")\
                                     .update({"reminder_sent": True})\
@@ -2246,7 +2376,9 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
                                     app_date=st.session_state.selected_date,
                                     app_time=st.session_state.selected_time,
                                     name=name,
-                                    dept=st.session_state.selected_dept
+                                    dept=st.session_state.selected_dept,
+                                    appointment_id=st.session_state.appointment_id,
+                                    phone=phone
                                 )
                             st.session_state.step = 4
                             st.rerun()
@@ -2261,6 +2393,15 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
     # --- STEP 4: แสดงผลสิทธิ์สำเร็จ (Success Screen) ---
     elif st.session_state.step == 4:
         q_num = get_queue_number(st.session_state.selected_time)
+        thai_date_str = format_thai_date(st.session_state.selected_date)
+        
+        # ป้องกันคำซ้ำซ้อน "แผนกแผนก"
+        dept_name = theme['title_thai']
+        if dept_name.startswith("แผนกแผนก"):
+            dept_name = dept_name.replace("แผนกแผนก", "แผนก", 1)
+        elif not dept_name.startswith("แผนก"):
+            dept_name = f"แผนก{dept_name}"
+            
         st.markdown(f"""
         <div class="success-box" style="text-align: center; padding: 1.5rem; background-color: #E8F5E9; border-radius: 12px; margin-bottom: 1.5rem;">
             <h2 style="margin: 0; color: #1B4332;">🎉 นัดหมายสำเร็จเรียบร้อยแล้วค่ะ</h2>
@@ -2272,37 +2413,35 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
         st.write("#### 📑 สรุปรายละเอียดการนัดหมาย")
         
         st.markdown(f"""
-        <div style="background-color: white; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 1.5rem;">
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 0.5rem 0; color: #888;"><b>ประเภทบริการ:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right; font-weight: bold; color: {theme['primary']};">{st.session_state.selected_service}</td>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 0.5rem 0; color: #888;"><b>ชื่อผู้รับบริการ:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right;">{st.session_state.user_name}</td>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 0.5rem 0; color: #888;"><b>เบอร์โทรติดต่อ:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right;">{st.session_state.user_phone}</td>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 0.5rem 0; color: #888;"><b>วันที่นัดหมาย:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right; font-weight: bold;">{st.session_state.selected_date.strftime('%d/%m/%Y')}</td>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 0.5rem 0; color: #888;"><b>เวลานัดหมาย:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right; font-weight: bold; color: {theme['primary']};">{st.session_state.selected_time} น.</td>
-                </tr>
-                <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 0.5rem 0; color: #888;"><b>ลำดับคิว:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right; font-weight: bold; color: {theme['primary']};">คิวที่ {q_num}</td>
-                </tr>
-                <tr>
-                    <td style="padding: 0.5rem 0; color: #888;"><b>สถานที่:</b></td>
-                    <td style="padding: 0.5rem 0; text-align: right;">แผนก{theme['title_thai']} รพ.สต.ท่าเกษม</td>
-                </tr>
-            </table>
+        <div style="background-color: white; padding: 1.2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">ประเภทบริการ:</span>
+                <span style="text-align: right; font-weight: bold; color: {theme['primary']}; word-break: break-word; flex-grow: 1; padding-left: 10px;">{st.session_state.selected_service}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">ชื่อผู้รับบริการ:</span>
+                <span style="text-align: right; word-break: break-word; flex-grow: 1; padding-left: 10px;">{st.session_state.user_name}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">เบอร์โทรติดต่อ:</span>
+                <span style="text-align: right; word-break: break-word; flex-grow: 1; padding-left: 10px;">{st.session_state.user_phone}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">วันที่นัดหมาย:</span>
+                <span style="text-align: right; font-weight: bold; word-break: break-word; flex-grow: 1; padding-left: 10px;">{thai_date_str}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">เวลานัดหมาย:</span>
+                <span style="text-align: right; font-weight: bold; color: {theme['primary']}; word-break: break-word; flex-grow: 1; padding-left: 10px;">{st.session_state.selected_time} น.</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0; border-bottom: 1px solid #eee;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">ลำดับคิว:</span>
+                <span style="text-align: right; font-weight: bold; color: {theme['primary']}; word-break: break-word; flex-grow: 1; padding-left: 10px;">คิวที่ {q_num}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 0.6rem 0;">
+                <span style="color: #666; font-weight: bold; flex-shrink: 0; min-width: 115px;">สถานที่:</span>
+                <span style="text-align: right; word-break: break-word; flex-grow: 1; padding-left: 10px;">{dept_name} รพ.สต.ท่าเกษม</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
         
