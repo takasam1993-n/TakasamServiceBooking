@@ -244,7 +244,7 @@ dept_cal_map = {
 }
 
 # Staff Portal Config
-staff_password = str(st.secrets.get("STAFF_PASSWORD", "1234")).strip()
+staff_password = str(st.secrets.get("STAFF_PASSWORD") or st.secrets.get("staff_password") or "1234").strip()
 
 # LINE LIFF URL Config
 liff_url = f"https://liff.line.me/{liff_id}" if (liff_id and "xxxxxxxx" not in liff_id) else "https://line.me"
@@ -2121,7 +2121,8 @@ else:
                     st.success("สิทธิ์การเข้าใช้งานถูกต้อง กำลังโหลดระบบหลังบ้าน...")
                     st.rerun()
                 else:
-                    st.error(f"รหัสผ่านผู้ใช้งานไม่ถูกต้อง กรุณากรอกอีกครั้ง (รหัสผ่านที่ดึงจากระบบ: '{staff_password}')")
+                    secrets_keys = list(st.secrets.keys()) if hasattr(st, "secrets") else []
+                    st.error(f"รหัสผ่านผู้ใช้งานไม่ถูกต้อง กรุณากรอกอีกครั้ง (ดึงจากระบบ: '{staff_password}', คีย์ทั้งหมดที่เจอใน Secrets: {secrets_keys})")
     else:
         # แถบข้างเพิ่มปุ่มออกจากระบบ
         if st.sidebar.button("🚪 ออกจากระบบหลังบ้าน"):
