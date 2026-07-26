@@ -1433,7 +1433,7 @@ def construct_dental_flex_payload(title, subtitle, service, app_date, app_time, 
                     "type": "box",
                     "layout": "vertical",
                     "flex": 3,
-                    "alignment": "center",
+                    "alignItems": "center",
                     "justifyContent": "center",
                     "contents": [
                         {
@@ -1647,6 +1647,8 @@ def send_line_flex_message(user_id, service, app_date, app_time, name, dept, app
     
     try:
         response = requests.post(url, headers=headers, json=payload)
+        if response.status_code != 200:
+            st.error(f"❌ ส่ง LINE Flex Message ล้มเหลว (สถานะ {response.status_code}): {response.text}")
         return response.status_code == 200
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการส่ง LINE Flex Message: {e}")
@@ -1690,6 +1692,8 @@ def send_line_reminder_flex(user_id, service, app_date, app_time, name, dept, ap
     
     try:
         response = requests.post(url, headers=headers, json=payload)
+        if response.status_code != 200:
+            print(f"เกิดข้อผิดพลาดในการส่ง LINE Flex Message แจ้งเตือน (สถานะ {response.status_code}): {response.text}")
         return response.status_code == 200
     except Exception as e:
         print(f"เกิดข้อผิดพลาดในการส่ง LINE Flex Message แจ้งเตือน: {e}")
