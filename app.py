@@ -2052,26 +2052,11 @@ with st.sidebar:
         st.success("🔌 เชื่อมต่อ Supabase แล้ว")
         st.caption(f"URL: `{supabase_url[:25]}...`")
 
-# ----------------- LINE LIFF Custom Component integration -----------------
-import os
-_LIFF_COMPONENT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "liff_component")
-_liff_login_func = components.declare_component("liff_login", path=_LIFF_COMPONENT_PATH)
-
+# ----------------- LINE LIFF Login Redirector integration -----------------
 def render_liff_login(liff_id):
-    if not liff_id or "xxxxxxxx" in liff_id:
-        return
-        
-    profile = _liff_login_func(liffId=liff_id, key="liff_login_comp", height=40)
-    
-    if profile and isinstance(profile, dict):
-        user_id = profile.get("userId")
-        display_name = profile.get("displayName", "ผู้ใช้งาน LINE")
-        picture_url = profile.get("pictureUrl", "")
-        
-        if user_id:
-            st.session_state.line_user_id = user_id
-            st.session_state.line_display_name = display_name
-            st.session_state.line_picture_url = picture_url
+    # เข้าสู่ระบบผ่านหน้าล็อกอินหลัก (redirect.html) ที่ตั้งไว้ใน LINE Developers Console
+    # ระบบจะส่งค่า userId, displayName กลับมาทาง URL query parameters อัตโนมัติ
+    pass
 
 # ----------------- PATIENT PORTAL (LINE LIFF) -----------------
 if app_mode == "ผู้รับบริการ (LINE LIFF)":

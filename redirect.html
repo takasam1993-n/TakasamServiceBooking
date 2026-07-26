@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>รพ.สต.ท่าเกษม - กำลังนำทาง</title>
+  <!-- โหลด LINE LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #F8F9FA;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .loader {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #2D6A4F;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .text {
+      margin-top: 20px;
+      font-size: 15px;
+      color: #555;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="loader"></div>
+  <div class="text" id="status">กำลังเชื่อมต่อสิทธิ์ LINE...</div>
+
+  <script>
+    // ตั้งค่า URL ของแอป Streamlit ของคุณที่นี่
+    const STREAMLIT_APP_URL = "https://takasamservicebooking.streamlit.app/"; 
+    // ตั้งค่า LIFF ID ของคุณ
+    const LIFF_ID = "2010834872-8UUCRuGD";
+
+    liff.init({ liffId: LIFF_ID }).then(() => {
+      if (!liff.isLoggedIn()) {
+        document.getElementById("status").innerText = "กำลังเข้าสู่ระบบ LINE...";
+        liff.login();
+      } else {
+        document.getElementById("status").innerText = "เข้าสู่ระบบสำเร็จ กำลังส่งข้อมูลไปยังแอปจอง...";
+        liff.getProfile().then((profile) => {
+          const redirectUrl = new URL(STREAMLIT_APP_URL);
+          redirectUrl.searchParams.set("userId", profile.userId);
+          redirectUrl.searchParams.set("displayName", profile.displayName);
+          if (profile.pictureUrl) {
+            redirectUrl.searchParams.set("pictureUrl", profile.pictureUrl);
+          }
+          // ทำการ Redirect หน้าหลักไปยัง Streamlit พร้อมข้อมูล User ID แบบปลอดภัย
+          window.location.replace(redirectUrl.toString());
+        }).catch((err) => {
+          console.error("Profile error:", err);
+          window.location.replace(STREAMLIT_APP_URL);
+        });
+      }
+    }).catch((err) => {
+      console.error("LIFF init error:", err);
+      document.getElementById("status").innerText = "เกิดข้อผิดพลาดในการเริ่มต้น LIFF: " + err;
+      // ในกรณีฉุกเฉินให้ส่งไปหน้าจองเลย
+      setTimeout(() => {
+        window.location.replace(STREAMLIT_APP_URL);
+      }, 2000);
+    });
+  </script>
+</body>
+</html>
