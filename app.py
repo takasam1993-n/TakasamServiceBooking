@@ -3118,153 +3118,181 @@ else:
         with tab_depts:
             st.write("### 🏥 จัดการแผนกบริการ (เพิ่ม / แก้ไข / ลบ)")
             
-            depts_in_db = fetch_all_departments()
-            
-            sub_dept_list, sub_dept_add, sub_dept_edit, sub_dept_delete = st.tabs([
-                "📋 รายการแผนกบริการในปัจจุบัน",
-                "➕ เพิ่มแผนกใหม่",
-                "✏️ แก้ไขแผนกที่มีอยู่",
-                "🗑️ ลบแผนกออกจากระบบ"
-            ])
-            
-            with sub_dept_list:
-                st.write("#### รายชื่อแผนกที่เปิดให้บริการผ่านไลน์")
-                if not depts_in_db:
-                    st.info("ไม่มีแผนกในระบบในขณะนี้")
-                else:
-                    for d in depts_in_db:
-                        st.markdown(f"""
-                        <div style="padding: 1rem; border-left: 5px solid {d['theme_color']}; background-color: #F8F9FA; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-                            <div style="display: flex; align-items: center; gap: 15px;">
-                                <img src="{d['banner_img']}" width="40">
-                                <div>
-                                    <strong style="font-size: 1.1rem; color: #240046;">{d['display_name']}</strong><br>
-                                    <span style="font-size: 0.85rem; color: #6C757D;">รหัสอ้างอิง: <code>{d['key']}</code> | รหัสสี: <span style="color: {d['theme_color']}; font-weight: bold;">{d['theme_color']}</span></span>
+            if "dept_admin_logged_in" not in st.session_state:
+                st.session_state.dept_admin_logged_in = False
+                
+            if not st.session_state.dept_admin_logged_in:
+                col_admin_left, col_admin_mid, col_admin_right = st.columns([1, 2, 1])
+                with col_admin_mid:
+                    st.markdown("""
+                    <div style="background-color: #FFF2E6; padding: 1.5rem; border-radius: 12px; border-top: 4px solid #FF9F1C; text-align: center; margin-bottom: 1.5rem;">
+                        <h4 style="color: #FF9F1C; margin: 0; font-weight: 700;">🔒 พื้นที่ป้องกันเฉพาะผู้ดูแลระบบหลัก</h4>
+                        <p style="font-size: 0.85rem; color: #666; margin-top: 5px; margin-bottom: 0;">กรุณายืนยันรหัสผ่านควบคุมเพื่อตั้งค่าหรือจัดการแผนกบริการ</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    admin_passcode = st.text_input("ป้อนรหัสผ่านเพื่อเข้าใช้งานหน้าจัดการแผนกบริการ:", type="password", key="admin_dept_pass_input")
+                    if st.button("ยืนยันรหัสผ่านผู้ดูแลระบบ 🔑", use_container_width=True, key="btn_confirm_admin_dept"):
+                        if admin_passcode.strip() == "IyD{Nfoyp02":
+                            st.session_state.dept_admin_logged_in = True
+                            st.success("สิทธิ์ผู้ดูแลระบบหลักถูกต้อง กำลังเปิดหน้าจัดการแผนก...")
+                            st.rerun()
+                        else:
+                            st.error("❌ รหัสผ่านไม่ถูกต้อง กรุณาป้อนรหัสผ่านที่ถูกต้อง")
+            else:
+                col_title_dept, col_logout_dept = st.columns([3, 1])
+                with col_logout_dept:
+                    if st.button("🔒 ล็อกหน้าจัดการแผนก", use_container_width=True, key="btn_logout_dept_admin"):
+                        st.session_state.dept_admin_logged_in = False
+                        st.rerun()
+
+                depts_in_db = fetch_all_departments()
+                
+                sub_dept_list, sub_dept_add, sub_dept_edit, sub_dept_delete = st.tabs([
+                    "📋 รายการแผนกบริการในปัจจุบัน",
+                    "➕ เพิ่มแผนกใหม่",
+                    "✏️ แก้ไขแผนกที่มีอยู่",
+                    "🗑️ ลบแผนกออกจากระบบ"
+                ])
+                
+                with sub_dept_list:
+                    st.write("#### รายชื่อแผนกที่เปิดให้บริการผ่านไลน์")
+                    if not depts_in_db:
+                        st.info("ไม่มีแผนกในระบบในขณะนี้")
+                    else:
+                        for d in depts_in_db:
+                            st.markdown(f"""
+                            <div style="padding: 1rem; border-left: 5px solid {d['theme_color']}; background-color: #F8F9FA; border-radius: 8px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 15px;">
+                                    <img src="{d['banner_img']}" width="40">
+                                    <div>
+                                        <strong style="font-size: 1.1rem; color: #240046;">{d['display_name']}</strong><br>
+                                        <span style="font-size: 0.85rem; color: #6C757D;">รหัสอ้างอิง: <code>{d['key']}</code> | รหัสสี: <span style="color: {d['theme_color']}; font-weight: bold;">{d['theme_color']}</span></span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                            """, unsafe_allow_html=True)
+                            
+                with sub_dept_add:
+                    st.write("#### ➕ เพิ่มแผนกบริการใหม่")
+                    with st.form("add_dept_form"):
+                        new_dept_key = st.text_input(
+                            "รหัสแผนกภาษาอังกฤษ (เช่น pediatrics, general_medicine):", 
+                            placeholder="ห้ามมีช่องว่าง ใช้ภาษาอังกฤษตัวเล็กเท่านั้น"
+                        ).strip().lower()
                         
-            with sub_dept_add:
-                st.write("#### ➕ เพิ่มแผนกบริการใหม่")
-                with st.form("add_dept_form"):
-                    new_dept_key = st.text_input(
-                        "รหัสแผนกภาษาอังกฤษ (เช่น pediatrics, general_medicine):", 
-                        placeholder="ห้ามมีช่องว่าง ใช้ภาษาอังกฤษตัวเล็กเท่านั้น"
-                    ).strip().lower()
-                    
-                    new_dept_name = st.text_input(
-                        "ชื่อแผนกบริการภาษาไทย (เช่น แผนกกุมารเวชกรรม, คลินิกโรคทั่วไป):", 
-                        placeholder="ระบุชื่อภาษาไทยที่แสดงให้คนไข้เห็น"
-                    )
-                    
-                    new_dept_color = st.color_picker("เลือกสีหลักของแผนก (Theme Color):", value="#7B2CBF")
-                    
-                    icon_options = {
-                        "🏥 โรงพยาบาล/บริการทั่วไป": "https://img.icons8.com/color/144/hospital.png",
-                        "🦷 ทันตกรรม (ฟัน)": "https://img.icons8.com/color/144/tooth.png",
-                        "🍃 แพทย์แผนไทย (ครกสมุนไพร)": "https://img.icons8.com/color/144/mortar-and-pestle.png",
-                        "♿ กายภาพบำบัด (วีลแชร์)": "https://img.icons8.com/color/144/physical-therapy.png",
-                        "💉 วัคซีน (เข็มฉีดยา)": "https://img.icons8.com/color/144/syringe.png",
-                        "💊 ร้านขายยา/เภสัช": "https://img.icons8.com/color/144/pill.png",
-                        "❤️ หัวใจ/ตรวจสุขภาพ": "https://img.icons8.com/color/144/heart-monitor.png"
-                    }
-                    
-                    selected_preset = st.selectbox("เลือกไอคอนแผนกจากรายการแนะนำ:", list(icon_options.keys()))
-                    custom_dept_img = st.text_input(
-                        "หรือระบุ URL รูปภาพไอคอนอื่นๆ (เว้นว่างไว้จะใช้ไอคอนแนะนำที่เลือกด้านบน):",
-                        placeholder="https://..."
-                    ).strip()
-                    
-                    add_dept_submitted = st.form_submit_button("➕ บันทึกแผนกใหม่", use_container_width=True)
-                    if add_dept_submitted:
-                        final_img = custom_dept_img if custom_dept_img else icon_options[selected_preset]
-                        if not new_dept_key or not new_dept_name:
-                            st.error("❌ กรุณากรอกรหัสแผนกและชื่อแผนกบริการให้ครบถ้วน")
-                        elif not new_dept_key.isalnum() and "_" not in new_dept_key:
-                            st.error("❌ รหัสแผนกต้องประกอบด้วยตัวอักษรภาษาอังกฤษหรือตัวเลข และเครื่องหมาย _ เท่านั้น")
-                        else:
-                            success, message = create_department_db(new_dept_key, new_dept_name, new_dept_color, final_img)
-                            if success:
-                                st.success(f"🟢 {message}")
-                                st.rerun()
-                            else:
-                                st.error(f"❌ {message}")
-                                
-            with sub_dept_edit:
-                st.write("#### ✏️ แก้ไขแผนกบริการที่มีอยู่")
-                if not depts_in_db:
-                    st.info("ไม่มีแผนกให้แก้ไขในระบบ")
-                else:
-                    edit_dept_options = {f"{d['display_name']} ({d['key']})": d for d in depts_in_db}
-                    selected_edit_label = st.selectbox(
-                        "เลือกแผนกที่ต้องการแก้ไข:",
-                        list(edit_dept_options.keys()),
-                        key="sb_edit_dept_select"
-                    )
-                    selected_edit_dept = edit_dept_options[selected_edit_label]
-                    
-                    with st.form("edit_dept_form"):
-                        edit_dept_name = st.text_input(
-                            "ชื่อแผนกบริการภาษาไทย:", 
-                            value=selected_edit_dept.get("display_name", "")
-                        )
-                        edit_dept_color = st.color_picker(
-                            "สีธีมหลักของแผนก:", 
-                            value=selected_edit_dept.get("theme_color", "#7B2CBF")
-                        )
-                        edit_dept_img = st.text_input(
-                            "ลิงก์ URL รูปภาพไอคอนแผนก:", 
-                            value=selected_edit_dept.get("banner_img", "")
+                        new_dept_name = st.text_input(
+                            "ชื่อแผนกบริการภาษาไทย (เช่น แผนกกุมารเวชกรรม, คลินิกโรคทั่วไป):", 
+                            placeholder="ระบุชื่อภาษาไทยที่แสดงให้คนไข้เห็น"
                         )
                         
-                        edit_dept_submitted = st.form_submit_button("✏️ บันทึกการแก้ไขแผนก", use_container_width=True)
-                        if edit_dept_submitted:
-                            if not edit_dept_name.strip():
-                                st.error("❌ กรุณากรอกชื่อแผนกบริการ")
+                        new_dept_color = st.color_picker("เลือกสีหลักของแผนก (Theme Color):", value="#7B2CBF")
+                        
+                        icon_options = {
+                            "🏥 โรงพยาบาล/บริการทั่วไป": "https://img.icons8.com/color/144/hospital.png",
+                            "🦷 ทันตกรรม (ฟัน)": "https://img.icons8.com/color/144/tooth.png",
+                            "🍃 แพทย์แผนไทย (ครกสมุนไพร)": "https://img.icons8.com/color/144/mortar-and-pestle.png",
+                            "♿ กายภาพบำบัด (วีลแชร์)": "https://img.icons8.com/color/144/physical-therapy.png",
+                            "💉 วัคซีน (เข็มฉีดยา)": "https://img.icons8.com/color/144/syringe.png",
+                            "💊 ร้านขายยา/เภสัช": "https://img.icons8.com/color/144/pill.png",
+                            "❤️ หัวใจ/ตรวจสุขภาพ": "https://img.icons8.com/color/144/heart-monitor.png"
+                        }
+                        
+                        selected_preset = st.selectbox("เลือกไอคอนแผนกจากรายการแนะนำ:", list(icon_options.keys()))
+                        custom_dept_img = st.text_input(
+                            "หรือระบุ URL รูปภาพไอคอนอื่นๆ (เว้นว่างไว้จะใช้ไอคอนแนะนำที่เลือกด้านบน):",
+                            placeholder="https://..."
+                        ).strip()
+                        
+                        add_dept_submitted = st.form_submit_button("➕ บันทึกแผนกใหม่", use_container_width=True)
+                        if add_dept_submitted:
+                            final_img = custom_dept_img if custom_dept_img else icon_options[selected_preset]
+                            if not new_dept_key or not new_dept_name:
+                                st.error("❌ กรุณากรอกรหัสแผนกและชื่อแผนกบริการให้ครบถ้วน")
+                            elif not new_dept_key.isalnum() and "_" not in new_dept_key:
+                                st.error("❌ รหัสแผนกต้องประกอบด้วยตัวอักษรภาษาอังกฤษหรือตัวเลข และเครื่องหมาย _ เท่านั้น")
                             else:
-                                success, message = update_department_db(
-                                    selected_edit_dept["key"],
-                                    edit_dept_name.strip(),
-                                    edit_dept_color,
-                                    edit_dept_img.strip()
-                                )
+                                success, message = create_department_db(new_dept_key, new_dept_name, new_dept_color, final_img)
                                 if success:
                                     st.success(f"🟢 {message}")
                                     st.rerun()
                                 else:
                                     st.error(f"❌ {message}")
                                     
-            with sub_dept_delete:
-                st.write("#### 🗑️ ลบแผนกออกจากระบบ")
-                if not depts_in_db:
-                    st.info("ไม่มีแผนกให้ลบในขณะนี้")
-                else:
-                    del_dept_options = {f"{d['display_name']} ({d['key']})": d for d in depts_in_db}
-                    selected_del_label = st.selectbox(
-                        "เลือกแผนกที่ต้องการลบ:",
-                        list(del_dept_options.keys()),
-                        key="sb_del_dept_select"
-                    )
-                    selected_del_dept = del_dept_options[selected_del_label]
-                    
-                    st.warning(f"⚠️ การดำเนินการนี้จะลบแผนก '{selected_del_dept['display_name']}' ออกจากตารางตั้งค่า และจะลบข้อมูลบริการรักษาทั้งหมดที่เกี่ยวข้องกับแผนกนี้! โปรดตรวจสอบให้แน่ใจก่อนทำการลบ")
-                    
-                    confirm_del_text = st.text_input(
-                        f"พิมพ์คำว่า `{selected_del_dept['key']}` ในช่องด้านล่างเพื่อยืนยันสิทธิ์การลบ:",
-                        placeholder="พิมพ์เพื่อยืนยัน"
-                    ).strip().lower()
-                    
-                    if st.button("🗑️ ยืนยันการลบแผนกบริการ", type="primary", use_container_width=True):
-                        if confirm_del_text != selected_del_dept['key']:
-                            st.error("❌ คำยืนยันไม่ถูกต้อง กรุณากรอกรหัสแผนกบริการให้ตรงกัน")
-                        else:
-                            success, message = delete_department_db(selected_del_dept['key'])
-                            if success:
-                                st.success(f"🟢 {message}")
-                                st.rerun()
+                with sub_dept_edit:
+                    st.write("#### ✏️ แก้ไขแผนกบริการที่มีอยู่")
+                    if not depts_in_db:
+                        st.info("ไม่มีแผนกให้แก้ไขในระบบ")
+                    else:
+                        edit_dept_options = {f"{d['display_name']} ({d['key']})": d for d in depts_in_db}
+                        selected_edit_label = st.selectbox(
+                            "เลือกแผนกที่ต้องการแก้ไข:",
+                            list(edit_dept_options.keys()),
+                            key="sb_edit_dept_select"
+                        )
+                        selected_edit_dept = edit_dept_options[selected_edit_label]
+                        
+                        with st.form("edit_dept_form"):
+                            edit_dept_name = st.text_input(
+                                "ชื่อแผนกบริการภาษาไทย:", 
+                                value=selected_edit_dept.get("display_name", "")
+                            )
+                            edit_dept_color = st.color_picker(
+                                "สีธีมหลักของแผนก:", 
+                                value=selected_edit_dept.get("theme_color", "#7B2CBF")
+                            )
+                            edit_dept_img = st.text_input(
+                                "ลิงก์ URL รูปภาพไอคอนแผนก:", 
+                                value=selected_edit_dept.get("banner_img", "")
+                            )
+                            
+                            edit_dept_submitted = st.form_submit_button("✏️ บันทึกการแก้ไขแผนก", use_container_width=True)
+                            if edit_dept_submitted:
+                                if not edit_dept_name.strip():
+                                    st.error("❌ กรุณากรอกชื่อแผนกบริการ")
+                                else:
+                                    success, message = update_department_db(
+                                        selected_edit_dept["key"],
+                                        edit_dept_name.strip(),
+                                        edit_dept_color,
+                                        edit_dept_img.strip()
+                                    )
+                                    if success:
+                                        st.success(f"🟢 {message}")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"❌ {message}")
+                                        
+                with sub_dept_delete:
+                    st.write("#### 🗑️ ลบแผนกออกจากระบบ")
+                    if not depts_in_db:
+                        st.info("ไม่มีแผนกให้ลบในขณะนี้")
+                    else:
+                        del_dept_options = {f"{d['display_name']} ({d['key']})": d for d in depts_in_db}
+                        selected_del_label = st.selectbox(
+                            "เลือกแผนกที่ต้องการลบ:",
+                            list(del_dept_options.keys()),
+                            key="sb_del_dept_select"
+                        )
+                        selected_del_dept = del_dept_options[selected_del_label]
+                        
+                        st.warning(f"⚠️ การดำเนินการนี้จะลบแผนก '{selected_del_dept['display_name']}' ออกจากตารางตั้งค่า และจะลบข้อมูลบริการรักษาทั้งหมดที่เกี่ยวข้องกับแผนกนี้! โปรดตรวจสอบให้แน่ใจก่อนทำการลบ")
+                        
+                        confirm_del_text = st.text_input(
+                            f"พิมพ์คำว่า `{selected_del_dept['key']}` ในช่องด้านล่างเพื่อยืนยันสิทธิ์การลบ:",
+                            placeholder="พิมพ์เพื่อยืนยัน"
+                        ).strip().lower()
+                        
+                        if st.button("🗑️ ยืนยันการลบแผนกบริการ", type="primary", use_container_width=True):
+                            if confirm_del_text != selected_del_dept['key']:
+                                st.error("❌ คำยืนยันไม่ถูกต้อง กรุณากรอกรหัสแผนกบริการให้ตรงกัน")
                             else:
-                                st.error(f"❌ {message}")
+                                success, message = delete_department_db(selected_del_dept['key'])
+                                if success:
+                                    st.success(f"🟢 {message}")
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ {message}")
 
 # ----------------- Footer -----------------
 st.divider()
