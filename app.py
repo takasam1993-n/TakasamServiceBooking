@@ -411,6 +411,110 @@ if "dept" in query_params:
         st.session_state.selected_dept = "physical_therapy"
 
 # ----------------- Helper Functions -----------------
+def get_settings(dept):
+    """ดึงข้อมูลการตั้งค่าสำหรับแผนกที่ระบุ (หรือแผนก Dental เป็นหลักถ้าไม่ระบุ)"""
+    if "settings" not in st.session_state:
+        # กำหนดค่าเริ่มต้นใน session_state
+        st.session_state.settings = {
+            "dental": {
+                "booking_range_days": 30,
+                "working_days": [0, 1, 2, 3, 4], # Mon-Fri
+                "closed_dates": [],
+                "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
+                "max_bookings_per_slot": 1
+            },
+            "thai_traditional": {
+                "booking_range_days": 30,
+                "working_days": [0, 1, 2, 3, 4],
+                "closed_dates": [],
+                "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
+                "max_bookings_per_slot": 1
+            },
+            "physical_therapy": {
+                "booking_range_days": 30,
+                "working_days": [0, 1, 2, 3, 4],
+                "closed_dates": [],
+                "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
+                "max_bookings_per_slot": 1
+            }
+        }
+        
+    if is_demo:
+        return st.session_state.settings.get(dept, st.session_state.settings["dental"])
+        
+    if not supabase_client:
+        return st.session_state.settings.get(dept, st.session_state.settings["dental"])
+        
+    try:
+        # ดึงการตั้งค่าจาก Supabase
+        response = supabase_client.table("system_settings").select("*").eq("department", dept).execute()
+        if response.data:
+            row = response.data[0]
+            working_days = row.get("working_days", [0, 1, 2, 3, 4])
+            closed_dates = row.get("closed_dates", [])
+            time_slots = row.get("time_slots", ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"])
+            time_slots = [":".join(s.split(":")[:2]) for s in time_slots]
+            
+            return {
+                "booking_range_days": row.get("booking_range_days", 30),
+                "working_days": working_days,
+                "closed_dates": closed_dates,
+                "time_slots": time_slots,
+                "max_bookings_per_slot": row.get("max_bookings_per_slot", 1)
+            }
+        else:
+            # หากไม่มีให้เพิ่มค่าตั้งต้นเข้าไป
+            default_set = st.session_state.settings.get(dept, st.session_state.settings["dental"])
+            supabase_client.table("system_settings").insert({
+                "department": dept,
+                "booking_range_days": default_set["booking_range_days"],
+                "working_days": default_set["working_days"],
+                "closed_dates": default_set["closed_dates"],
+                "time_slots": default_set["time_slots"],
+                "max_bookings_per_slot": default_set["max_bookings_per_slot"]
+            }).execute()
+            return default_set
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาดในการดึงการตั้งค่าจาก DB: {e}")
+        return st.session_state.settings.get(dept, st.session_state.settings["dental"])
+
+def update_settings_db(dept, booking_range_days, working_days, closed_dates, time_slots, max_bookings_per_slot):
+    """อัปเดตการตั้งค่าของแผนก"""
+    time_slots = [":".join(s.strip().split(":")[:2]) for s in time_slots if s.strip()]
+    
+    if is_demo:
+        if "settings" not in st.session_state:
+            get_settings(dept)
+        st.session_state.settings[dept] = {
+            "booking_range_days": int(booking_range_days),
+            "working_days": [int(d) for d in working_days],
+            "closed_dates": [str(d) for d in closed_dates],
+            "time_slots": time_slots,
+            "max_bookings_per_slot": int(max_bookings_per_slot)
+        }
+        return True, "อัปเดตการตั้งค่าสำเร็จ (โหมดสาธิต)"
+        
+    if not supabase_client:
+        return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
+        
+    try:
+        response = supabase_client.table("system_settings").select("id").eq("department", dept).execute()
+        data = {
+            "department": dept,
+            "booking_range_days": int(booking_range_days),
+            "working_days": [int(d) for d in working_days],
+            "closed_dates": [str(d) for d in closed_dates],
+            "time_slots": time_slots,
+            "max_bookings_per_slot": int(max_bookings_per_slot)
+        }
+        if response.data:
+            supabase_client.table("system_settings").update(data).eq("department", dept).execute()
+        else:
+            supabase_client.table("system_settings").insert(data).execute()
+        return True, "อัปเดตการตั้งค่าเรียบร้อยแล้ว"
+    except Exception as e:
+        return False, f"เกิดข้อผิดพลาดในการบันทึกการตั้งค่า: {e}"
+
 def format_thai_date(date_obj):
     """แปลงวันที่แบบ Python ให้เป็นภาษาไทย เช่น 12 มิถุนายน 2567 (พุธ)"""
     if isinstance(date_obj, str):
@@ -529,28 +633,40 @@ def create_gcal_event(dept, title, appointment_date, appointment_time, descripti
         return None
 
 def get_booked_slots(date_obj, dept):
-    """ดึงเวลาที่ถูกจองไปแล้วในวันที่เลือกของแผนกที่ระบุ"""
+    """ดึงเวลาที่ถูกจองไปแล้วในวันที่เลือกของแผนกที่ระบุโดยคำนวณตามจำนวนสูงสุดที่รับได้"""
     date_str = date_obj.isoformat()
+    dept_settings = get_settings(dept)
+    max_bookings = dept_settings.get("max_bookings_per_slot", 1)
+    
     if is_demo:
-        dept_slots = st.session_state.mock_db["time_slots"].get(dept, {})
-        return list(dept_slots.get(date_str, {}).keys())
+        appointments = st.session_state.mock_db.get("appointments", [])
+        slot_counts = {}
+        for app in appointments:
+            if app.get("department") == dept and app.get("appointment_date") == date_str:
+                t = app.get("appointment_time")
+                t_formatted = ":".join(t.split(":")[:2])
+                slot_counts[t_formatted] = slot_counts.get(t_formatted, 0) + 1
+        
+        booked = [t for t, count in slot_counts.items() if count >= max_bookings]
+        return booked
     
     if not supabase_client:
         return []
         
     try:
-        response = supabase_client.table("time_slots")\
-            .select("slot_time")\
+        response = supabase_client.table("appointments")\
+            .select("appointment_time")\
             .eq("department", dept)\
-            .eq("slot_date", date_str)\
-            .eq("status", "booked")\
+            .eq("appointment_date", date_str)\
             .execute()
         
-        booked = []
+        slot_counts = {}
         for row in response.data:
-            time_raw = row["slot_time"]
+            time_raw = row["appointment_time"]
             time_formatted = ":".join(time_raw.split(":")[:2])
-            booked.append(time_formatted)
+            slot_counts[time_formatted] = slot_counts.get(time_formatted, 0) + 1
+            
+        booked = [t for t, count in slot_counts.items() if count >= max_bookings]
         return booked
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลเวลา: {e}")
@@ -1725,22 +1841,40 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
         st.write(f"### 📌 ขั้นตอนที่ 2: เลือกวันและเวลาที่สะดวก")
         st.info(f"**บริการที่เลือก:** {st.session_state.selected_service}")
         
+        # ดึงการตั้งค่าของแผนกที่เลือก
+        dept_settings = get_settings(st.session_state.selected_dept)
+        booking_range = dept_settings.get("booking_range_days", 30)
+        working_days = dept_settings.get("working_days", [0, 1, 2, 3, 4])
+        closed_dates = dept_settings.get("closed_dates", [])
+        all_slots = dept_settings.get("time_slots", ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"])
+        
         # 1. เลือกวัน
         min_date = datetime.date.today()
-        max_date = min_date + datetime.timedelta(days=30)
-        selected_date = st.date_input("เลือกวันที่นัดหมาย (เปิดบริการวันจันทร์ - ศุกร์):", min_value=min_date, max_value=max_date, value=st.session_state.selected_date)
+        max_date = min_date + datetime.timedelta(days=booking_range)
         
-        # ตรวจสอบวันหยุดเสาร์-อาทิตย์
-        if selected_date.weekday() >= 5:
-            st.warning(f"⚠️ ขออภัยด้วยค่ะ รพ.สต.ท่าเกษม ปิดให้บริการแผนก{theme['title_thai']}ในวันเสาร์-อาทิตย์ กรุณาเลือกวันจันทร์-ศุกร์")
+        thai_days_name = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
+        working_days_text = ", ".join([thai_days_name[d] for d in working_days])
+        
+        selected_date = st.date_input(
+            f"เลือกวันที่นัดหมาย (เปิดบริการวัน: {working_days_text}):", 
+            min_value=min_date, 
+            max_value=max_date, 
+            value=st.session_state.selected_date
+        )
+        
+        # ตรวจสอบวันหยุดและวันให้บริการ
+        selected_weekday = selected_date.weekday()
+        selected_date_str = selected_date.isoformat()
+        
+        if selected_weekday not in working_days:
+            st.warning(f"⚠️ ขออภัยด้วยค่ะ รพ.สต.ท่าเกษม ปิดให้บริการแผนก{theme['title_thai']}ในวัน{thai_days_name[selected_weekday]} (เปิดให้บริการวัน: {working_days_text})")
+        elif selected_date_str in closed_dates:
+            st.warning(f"⚠️ ขออภัยด้วยค่ะ วันที่ {format_thai_date(selected_date)} เป็นวันหยุดพิเศษ/งดให้บริการของแผนก{theme['title_thai']} กรุณาเลือกวันอื่น")
         else:
             st.session_state.selected_date = selected_date
             
             # ดึงช่วงเวลาที่ถูกจองไปแล้ว
             booked_slots = get_booked_slots(selected_date, st.session_state.selected_dept)
-            
-            # กำหนดสล็อตเวลางาน
-            all_slots = ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"]
             
             st.write("#### ⏰ ช่วงเวลาให้บริการ")
             
@@ -2116,18 +2250,41 @@ else:
                 )
                 custom_staff_service = st.text_input("กรณีเลือกบริการอื่นๆ กรุณาระบุรายละเอียด:")
                 
+                # ดึงค่าการตั้งค่าจากระบบของแผนกที่เลือก
+                dept_settings = get_settings(selected_staff_dept)
+                booking_range = dept_settings.get("booking_range_days", 30)
+                working_days = dept_settings.get("working_days", [0, 1, 2, 3, 4])
+                closed_dates = dept_settings.get("closed_dates", [])
+                all_slots = dept_settings.get("time_slots", ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"])
+                
+                thai_days_name = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
+                working_days_text = ", ".join([thai_days_name[d] for d in working_days])
+                
                 staff_date = st.date_input(
-                    "เลือกวันที่นัดหมาย (วันจันทร์ - ศุกร์):",
+                    f"เลือกวันที่นัดหมาย (เปิดบริการวัน: {working_days_text}):",
                     min_value=datetime.date.today(),
-                    max_value=datetime.date.today() + datetime.timedelta(days=30)
+                    max_value=datetime.date.today() + datetime.timedelta(days=booking_range)
                 )
+                
+                # ตรวจสอบวันหยุดและวันให้บริการ
+                selected_weekday = staff_date.weekday()
+                selected_date_str = staff_date.isoformat()
+                
+                is_valid_date = True
+                if selected_weekday not in working_days:
+                    st.warning(f"⚠️ แผนกที่เลือกปิดให้บริการในวัน{thai_days_name[selected_weekday]} (วันเปิดบริการ: {working_days_text})")
+                    is_valid_date = False
+                elif selected_date_str in closed_dates:
+                    st.warning(f"⚠️ วันที่ {format_thai_date(staff_date)} เป็นวันหยุดพิเศษ/งดให้บริการ")
+                    is_valid_date = False
                 
                 # ดึงช่วงเวลาที่ว่าง
                 booked_slots = get_booked_slots(staff_date, selected_staff_dept)
-                all_slots = ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"]
                 available_slots = [s for s in all_slots if s not in booked_slots]
                 
-                if not available_slots:
+                if not is_valid_date:
+                    staff_time = None
+                elif not available_slots:
                     st.warning("⚠️ ไม่มีช่วงเวลาว่างให้สามารถจองคิวเพิ่มได้ในวันนี้ กรุณาเปลี่ยนวันที่ต้องการจอง")
                     staff_time = None
                 else:
@@ -2295,12 +2452,13 @@ else:
             # โหลดบริการของแผนกที่เลือก
             current_services = fetch_services(selected_manage_dept)
             
-            # แบ่งส่วน Add, Edit, Delete และตั้งค่าปฏิทินด้วย subtabs
-            subtab_list, subtab_add, subtab_edit, subtab_delete, subtab_gcal = st.tabs([
+            # แบ่งส่วน Add, Edit, Delete, ตั้งค่าคิว และตั้งค่าปฏิทินด้วย subtabs
+            subtab_list, subtab_add, subtab_edit, subtab_delete, subtab_schedule, subtab_gcal = st.tabs([
                 "📋 รายการบริการปัจจุบัน",
                 "➕ เพิ่มบริการใหม่",
                 "✏️ แก้ไขบริการที่มีอยู่",
                 "❌ ลบบริการ",
+                "📅 จัดการวันและเวลาให้บริการ",
                 "📅 ตั้งค่า Google Calendar"
             ])
             
@@ -2407,6 +2565,162 @@ else:
                             st.rerun()
                         else:
                             st.error(message)
+                            
+            with subtab_schedule:
+                st.write(f"#### ⚙️ จัดการเวลาและวันให้บริการของ {manage_dept}")
+                
+                # ดึงการตั้งค่าปัจจุบัน
+                dept_settings = get_settings(selected_manage_dept)
+                
+                # 1. ระยะเวลาเปิดให้จองล่วงหน้า
+                cfg_range = st.number_input(
+                    "ระยะจำนวนวันเปิดให้จองล่วงหน้า (วัน):",
+                    min_value=1,
+                    max_value=365,
+                    value=dept_settings.get("booking_range_days", 30),
+                    help="กำหนดว่าคนไข้สามารถทำนัดหมายล่วงหน้าได้กี่วันนับจากวันนี้",
+                    key=f"cfg_range_{selected_manage_dept}"
+                )
+                
+                # 2. จำนวนคิวสูงสุดต่อสล็อตเวลา
+                cfg_capacity = st.number_input(
+                    "จำนวนผู้รับบริการสูงสุดต่อช่วงเวลา (คิวต่อสล็อต):",
+                    min_value=1,
+                    max_value=20,
+                    value=dept_settings.get("max_bookings_per_slot", 1),
+                    help="กำหนดว่าในหนึ่งช่วงเวลา (เช่น 09:00 น.) สามารถรองรับคนไข้ได้พร้อมกันกี่คน",
+                    key=f"cfg_capacity_{selected_manage_dept}"
+                )
+                
+                st.divider()
+                
+                # 3. วันให้บริการประจำสัปดาห์
+                st.write("**📅 วันเปิดให้บริการประจำสัปดาห์**")
+                days_options = {
+                    "วันจันทร์": 0,
+                    "วันอังคาร": 1,
+                    "วันพุธ": 2,
+                    "วันพฤหัสบดี": 3,
+                    "วันศุกร์": 4,
+                    "วันเสาร์": 5,
+                    "วันอาทิตย์": 6
+                }
+                current_working_days = dept_settings.get("working_days", [0, 1, 2, 3, 4])
+                
+                # แสดง checkbox 7 วันแยกเป็นแถวแนวนอน
+                cols_days = st.columns(7)
+                selected_working_days = []
+                for label, val in days_options.items():
+                    col_idx = val
+                    with cols_days[col_idx]:
+                        checked = val in current_working_days
+                        if st.checkbox(label[3:], value=checked, key=f"wd_{selected_manage_dept}_{val}"):
+                            selected_working_days.append(val)
+                
+                st.divider()
+                
+                # 4. ตารางเวลาให้บริการ
+                st.write("**⏰ ตารางเวลาให้บริการ (Time Slots)**")
+                current_slots = dept_settings.get("time_slots", ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"])
+                slots_str = ", ".join(current_slots)
+                
+                cfg_slots_input = st.text_input(
+                    "ช่วงเวลาให้บริการ (คั่นด้วยเครื่องหมายจุลภาค ,):",
+                    value=slots_str,
+                    help="รูปแบบ HH:MM เช่น 08:30, 09:00, 13:30",
+                    key=f"cfg_slots_input_{selected_manage_dept}"
+                )
+                # แยกคำและทำความสะอาด
+                parsed_slots = []
+                if cfg_slots_input:
+                    for s in cfg_slots_input.split(","):
+                        s_clean = s.strip()
+                        if s_clean:
+                            if ":" in s_clean:
+                                parsed_slots.append(s_clean)
+                parsed_slots = sorted(list(set(parsed_slots)))
+                
+                st.divider()
+                
+                # 5. วันปิดทำการพิเศษ (Closed Dates)
+                st.write("**🚫 วันปิดทำการพิเศษ / วันหยุดแผนก**")
+                current_closed_dates = dept_settings.get("closed_dates", [])
+                
+                col_add_closed, col_list_closed = st.columns([1, 1])
+                
+                with col_add_closed:
+                    st.write("เพิ่มวันหยุดพิเศษ:")
+                    new_closed_date = st.date_input(
+                        "เลือกวันที่ต้องการหยุดให้บริการ:",
+                        min_value=datetime.date.today(),
+                        key=f"add_closed_date_{selected_manage_dept}"
+                    )
+                    new_closed_str = new_closed_date.isoformat()
+                    
+                    if st.button("➕ เพิ่มเป็นวันหยุดพิเศษ", key=f"btn_add_closed_{selected_manage_dept}", use_container_width=True):
+                        if new_closed_str not in current_closed_dates:
+                            current_closed_dates.append(new_closed_str)
+                            # อัปเดต DB ทันทีเพื่อให้แสดงผลในลิสต์โดยไม่ต้องกดเซฟหลัก
+                            update_settings_db(
+                                selected_manage_dept,
+                                cfg_range,
+                                selected_working_days,
+                                current_closed_dates,
+                                parsed_slots,
+                                cfg_capacity
+                            )
+                            st.success(f"เพิ่มวันที่ {format_thai_date(new_closed_date)} เป็นวันหยุดเรียบร้อยแล้ว")
+                            st.rerun()
+                        else:
+                            st.warning("วันนี้อยู่ในรายการวันหยุดพิเศษอยู่แล้ว")
+                
+                with col_list_closed:
+                    st.write("รายการวันหยุดพิเศษปัจจุบัน:")
+                    if not current_closed_dates:
+                        st.caption("ไม่มีวันหยุดพิเศษ")
+                    else:
+                        for c_date_str in sorted(current_closed_dates):
+                            c_date = datetime.date.fromisoformat(c_date_str)
+                            col_c_text, col_c_btn = st.columns([3, 1])
+                            with col_c_text:
+                                st.write(f"🛑 {format_thai_date(c_date)}")
+                            with col_c_btn:
+                                if st.button("🗑️", key=f"del_closed_{selected_manage_dept}_{c_date_str}"):
+                                    current_closed_dates.remove(c_date_str)
+                                    # อัปเดต DB ทันที
+                                    update_settings_db(
+                                        selected_manage_dept,
+                                        cfg_range,
+                                        selected_working_days,
+                                        current_closed_dates,
+                                        parsed_slots,
+                                        cfg_capacity
+                                    )
+                                    st.success("นำวันหยุดออกแล้ว")
+                                    st.rerun()
+                                    
+                st.divider()
+                
+                # ปุ่มบันทึกข้อมูลหลัก
+                if st.button("💾 บันทึกการตั้งค่าตารางและวันให้บริการของแผนก", key=f"btn_save_settings_{selected_manage_dept}", type="primary", use_container_width=True):
+                    if not selected_working_days:
+                        st.error("❌ ต้องเลือกวันเปิดทำการประจำสัปดาห์อย่างน้อย 1 วัน")
+                    elif not parsed_slots:
+                        st.error("❌ ต้องมีช่วงเวลาเปิดให้บริการอย่างน้อย 1 สล็อตเวลา")
+                    else:
+                        success, message = update_settings_db(
+                            selected_manage_dept,
+                            cfg_range,
+                            selected_working_days,
+                            current_closed_dates,
+                            parsed_slots,
+                            cfg_capacity
+                        )
+                        if success:
+                            st.success(f"🟢 {message}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {message}")
                             
             with subtab_gcal:
                 st.write(f"#### 📅 ตั้งค่าการเชื่อมโยง Google Calendar ของ {manage_dept}")
