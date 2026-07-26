@@ -18,6 +18,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Toast Notification Handler
+if "toast_notification" in st.session_state:
+    st.toast(st.session_state.toast_notification["message"], icon=st.session_state.toast_notification["icon"])
+    del st.session_state.toast_notification
+
 # Custom Styling (Theme colors matching the purple & clean flyer design)
 st.markdown("""
 <style>
@@ -2597,7 +2602,7 @@ else:
                             note=p_note
                         )
                         if success:
-                            st.success("บันทึกข้อมูลและจองเวลานัดหมายให้ผู้ป่วยเรียบร้อยแล้วค่ะ")
+                            st.session_state.toast_notification = {"message": f"ลงนัดหมายให้คุณ '{p_name}' เรียบร้อยแล้ว! 📅", "icon": "✅"}
                             st.rerun()
                         else:
                             st.error(f"เกิดข้อผิดพลาด: {message}")
@@ -2687,7 +2692,7 @@ else:
                             if st.button("ยืนยันยกเลิกและเปิดเวลากลับคืนระบบ 🗑️", type="primary", use_container_width=True):
                                 success, message = cancel_appointment_db(selected_cancel_id)
                                 if success:
-                                    st.success(f"ดำเนินการเรียบร้อยแล้ว: {message}")
+                                    st.session_state.toast_notification = {"message": f"ยกเลิกนัดหมายสำเร็จและเปิดสล็อตเวลากลับคืนระบบเรียบร้อยแล้ว! 🗑️", "icon": "✅"}
                                     st.rerun()
                                 else:
                                     st.error(f"ไม่สามารถดำเนินการลบได้เนื่องจาก: {message}")
@@ -2759,7 +2764,7 @@ else:
                         else:
                             success, message = add_service_db(selected_manage_dept, new_title.strip(), new_desc.strip(), new_icon.strip())
                             if success:
-                                st.success(message)
+                                st.session_state.toast_notification = {"message": f"เพิ่มบริการ '{new_title.strip()}' ใหม่สำเร็จ! ➕", "icon": "✅"}
                                 st.rerun()
                             else:
                                 st.error(message)
@@ -2798,7 +2803,7 @@ else:
                                     edit_icon.strip()
                                 )
                                 if success:
-                                    st.success(message)
+                                    st.session_state.toast_notification = {"message": f"แก้ไขบริการ '{edit_title.strip()}' เรียบร้อยแล้ว! ✏️", "icon": "✅"}
                                     st.rerun()
                                 else:
                                     st.error(message)
@@ -2824,7 +2829,7 @@ else:
                     if st.button("❌ ยืนยันการลบบริการ", type="primary", use_container_width=True):
                         success, message = delete_service_db(selected_del_obj["id"])
                         if success:
-                            st.success(message)
+                            st.session_state.toast_notification = {"message": f"ลบบริการ '{selected_del_obj.get('title')}' สำเร็จ! 🗑️", "icon": "✅"}
                             st.rerun()
                         else:
                             st.error(message)
@@ -3029,7 +3034,7 @@ else:
                                 cfg_capacity,
                                 final_slot_configs
                             )
-                            st.success(f"เพิ่มวันที่ {format_thai_date(new_closed_date)} เป็นวันหยุดเรียบร้อยแล้ว")
+                            st.session_state.toast_notification = {"message": f"เพิ่มวันหยุดพิเศษวันที่ {format_thai_date(new_closed_date)} สำเร็จ! 🛑", "icon": "✅"}
                             st.rerun()
                         else:
                             st.warning("วันนี้อยู่ในรายการวันหยุดพิเศษอยู่แล้ว")
@@ -3057,7 +3062,7 @@ else:
                                         cfg_capacity,
                                         final_slot_configs
                                     )
-                                    st.success("นำวันหยุดออกแล้ว")
+                                    st.session_state.toast_notification = {"message": "นำวันหยุดพิเศษออกแล้ว! 🗑️", "icon": "✅"}
                                     st.rerun()
                                     
                 st.divider()
@@ -3081,7 +3086,7 @@ else:
                         if success:
                             if state_slots_key in st.session_state:
                                 del st.session_state[state_slots_key]
-                            st.success(f"🟢 {message}")
+                            st.session_state.toast_notification = {"message": f"บันทึกการตั้งค่าตารางและวันให้บริการของ {manage_dept} สำเร็จ! 💾", "icon": "✅"}
                             st.rerun()
                         else:
                             st.error(f"❌ {message}")
@@ -3214,7 +3219,7 @@ else:
                             else:
                                 success, message = create_department_db(new_dept_key, new_dept_name, new_dept_color, final_img)
                                 if success:
-                                    st.success(f"🟢 {message}")
+                                    st.session_state.toast_notification = {"message": f"เพิ่มแผนก '{new_dept_name}' ใหม่สำเร็จ! 🏥", "icon": "✅"}
                                     st.rerun()
                                 else:
                                     st.error(f"❌ {message}")
@@ -3258,7 +3263,7 @@ else:
                                         edit_dept_img.strip()
                                     )
                                     if success:
-                                        st.success(f"🟢 {message}")
+                                        st.session_state.toast_notification = {"message": f"แก้ไขแผนก '{edit_dept_name.strip()}' เรียบร้อยแล้ว! ✏️", "icon": "✅"}
                                         st.rerun()
                                     else:
                                         st.error(f"❌ {message}")
@@ -3289,7 +3294,7 @@ else:
                             else:
                                 success, message = delete_department_db(selected_del_dept['key'])
                                 if success:
-                                    st.success(f"🟢 {message}")
+                                    st.session_state.toast_notification = {"message": f"ลบแผนก '{selected_del_dept['display_name']}' ออกจากระบบสำเร็จ! 🗑️", "icon": "✅"}
                                     st.rerun()
                                 else:
                                     st.error(f"❌ {message}")
