@@ -244,7 +244,7 @@ dept_cal_map = {
 }
 
 # Staff Portal Config
-staff_password = st.secrets.get("STAFF_PASSWORD", "1234")
+staff_password = str(st.secrets.get("STAFF_PASSWORD", "1234")).strip()
 
 # LINE LIFF URL Config
 liff_url = f"https://liff.line.me/{liff_id}" if (liff_id and "xxxxxxxx" not in liff_id) else "https://line.me"
@@ -2116,7 +2116,7 @@ else:
             passcode_label = "รหัสผ่านเจ้าหน้าที่ (รหัสผ่านคือ 1234 ในโหมดจำลอง):" if is_demo else "รหัสผ่านเจ้าหน้าที่:"
             passcode = st.text_input(passcode_label, type="password")
             if st.button("ยืนยันรหัสผ่าน 🔑", use_container_width=True):
-                if passcode == staff_password:
+                if passcode.strip() == staff_password:
                     st.session_state.staff_logged_in = True
                     st.success("สิทธิ์การเข้าใช้งานถูกต้อง กำลังโหลดระบบหลังบ้าน...")
                     st.rerun()
