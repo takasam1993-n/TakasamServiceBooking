@@ -426,21 +426,24 @@ def get_settings(dept):
                 "working_days": [0, 1, 2, 3, 4], # Mon-Fri
                 "closed_dates": [],
                 "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
-                "max_bookings_per_slot": 1
+                "max_bookings_per_slot": 1,
+                "slot_configs": []
             },
             "thai_traditional": {
                 "booking_range_days": 30,
                 "working_days": [0, 1, 2, 3, 4],
                 "closed_dates": [],
                 "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
-                "max_bookings_per_slot": 1
+                "max_bookings_per_slot": 1,
+                "slot_configs": []
             },
             "physical_therapy": {
                 "booking_range_days": 30,
                 "working_days": [0, 1, 2, 3, 4],
                 "closed_dates": [],
                 "time_slots": ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"],
-                "max_bookings_per_slot": 1
+                "max_bookings_per_slot": 1,
+                "slot_configs": []
             }
         }
         
@@ -465,7 +468,8 @@ def get_settings(dept):
                 "working_days": working_days,
                 "closed_dates": closed_dates,
                 "time_slots": time_slots,
-                "max_bookings_per_slot": row.get("max_bookings_per_slot", 1)
+                "max_bookings_per_slot": row.get("max_bookings_per_slot", 1),
+                "slot_configs": row.get("slot_configs", [])
             }
         else:
             # หากไม่มีให้เพิ่มค่าตั้งต้นเข้าไป
@@ -476,16 +480,19 @@ def get_settings(dept):
                 "working_days": default_set["working_days"],
                 "closed_dates": default_set["closed_dates"],
                 "time_slots": default_set["time_slots"],
-                "max_bookings_per_slot": default_set["max_bookings_per_slot"]
+                "max_bookings_per_slot": default_set["max_bookings_per_slot"],
+                "slot_configs": default_set.get("slot_configs", [])
             }).execute()
             return default_set
     except Exception as e:
         print(f"เกิดข้อผิดพลาดในการดึงการตั้งค่าจาก DB: {e}")
         return st.session_state.settings.get(dept, st.session_state.settings["dental"])
 
-def update_settings_db(dept, booking_range_days, working_days, closed_dates, time_slots, max_bookings_per_slot):
+def update_settings_db(dept, booking_range_days, working_days, closed_dates, time_slots, max_bookings_per_slot, slot_configs=None):
     """อัปเดตการตั้งค่าของแผนก"""
     time_slots = [":".join(s.strip().split(":")[:2]) for s in time_slots if s.strip()]
+    if slot_configs is None:
+        slot_configs = []
     
     if is_demo:
         if "settings" not in st.session_state:
@@ -495,7 +502,8 @@ def update_settings_db(dept, booking_range_days, working_days, closed_dates, tim
             "working_days": [int(d) for d in working_days],
             "closed_dates": [str(d) for d in closed_dates],
             "time_slots": time_slots,
-            "max_bookings_per_slot": int(max_bookings_per_slot)
+            "max_bookings_per_slot": int(max_bookings_per_slot),
+            "slot_configs": slot_configs
         }
         return True, "อัปเดตการตั้งค่าสำเร็จ (โหมดสาธิต)"
         
@@ -510,7 +518,8 @@ def update_settings_db(dept, booking_range_days, working_days, closed_dates, tim
             "working_days": [int(d) for d in working_days],
             "closed_dates": [str(d) for d in closed_dates],
             "time_slots": time_slots,
-            "max_bookings_per_slot": int(max_bookings_per_slot)
+            "max_bookings_per_slot": int(max_bookings_per_slot),
+            "slot_configs": slot_configs
         }
         if response.data:
             supabase_client.table("system_settings").update(data).eq("department", dept).execute()
@@ -637,45 +646,64 @@ def create_gcal_event(dept, title, appointment_date, appointment_time, descripti
         print(f"เกิดข้อผิดพลาดในการบันทึกคิวลง Google Calendar: {e}")
         return None
 
-def get_booked_slots(date_obj, dept):
-    """ดึงเวลาที่ถูกจองไปแล้วในวันที่เลือกของแผนกที่ระบุโดยคำนวณตามจำนวนสูงสุดที่รับได้"""
+def get_booked_slots(date_obj, dept, selected_service=None):
+    """ดึงเวลาที่ถูกจองไปแล้วในวันที่เลือกของแผนกที่ระบุโดยคำนวณตามจำนวนสูงสุดที่รับได้และกฎบริการรักษา"""
     date_str = date_obj.isoformat()
     dept_settings = get_settings(dept)
-    max_bookings = dept_settings.get("max_bookings_per_slot", 1)
+    slot_configs = dept_settings.get("slot_configs", [])
     
+    slot_counts = {}
     if is_demo:
         appointments = st.session_state.mock_db.get("appointments", [])
-        slot_counts = {}
         for app in appointments:
             if app.get("department") == dept and app.get("appointment_date") == date_str:
                 t = app.get("appointment_time")
                 t_formatted = ":".join(t.split(":")[:2])
                 slot_counts[t_formatted] = slot_counts.get(t_formatted, 0) + 1
-        
-        booked = [t for t, count in slot_counts.items() if count >= max_bookings]
-        return booked
-    
-    if not supabase_client:
-        return []
-        
-    try:
-        response = supabase_client.table("appointments")\
-            .select("appointment_time")\
-            .eq("department", dept)\
-            .eq("appointment_date", date_str)\
-            .execute()
-        
-        slot_counts = {}
-        for row in response.data:
-            time_raw = row["appointment_time"]
-            time_formatted = ":".join(time_raw.split(":")[:2])
-            slot_counts[time_formatted] = slot_counts.get(time_formatted, 0) + 1
+    else:
+        if not supabase_client:
+            return []
+        try:
+            response = supabase_client.table("appointments")\
+                .select("appointment_time")\
+                .eq("department", dept)\
+                .eq("appointment_date", date_str)\
+                .execute()
+            for row in response.data:
+                time_raw = row["appointment_time"]
+                time_formatted = ":".join(time_raw.split(":")[:2])
+                slot_counts[time_formatted] = slot_counts.get(time_formatted, 0) + 1
+        except Exception as e:
+            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลเวลา: {e}")
+            return []
+
+    booked = []
+    if slot_configs:
+        # ตรวจสอบตามกฎของรอบสล็อตเวลาเฉพาะ
+        for config in slot_configs:
+            time_str = config.get("time")
+            capacity = config.get("capacity", 1)
+            allowed_services = config.get("allowed_services", [])
             
-        booked = [t for t, count in slot_counts.items() if count >= max_bookings]
-        return booked
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลเวลา: {e}")
-        return []
+            # ก. ตรวจสอบว่าจำนวนคิวเต็มหรือยัง
+            count = slot_counts.get(time_str, 0)
+            if count >= capacity:
+                booked.append(time_str)
+                continue
+                
+            # ข. ตรวจสอบว่าบริการที่เลือกได้รับอนุญาตในเวลานี้หรือไม่
+            if selected_service and allowed_services:
+                allowed_cleaned = [s.strip() for s in allowed_services if s.strip()]
+                if allowed_cleaned and selected_service.strip() not in allowed_cleaned and "ทุกบริการ" not in allowed_cleaned:
+                    booked.append(time_str)
+    else:
+        # Fallback กรณีใช้ระบบเก่า (ไม่มี slot_configs)
+        max_bookings = dept_settings.get("max_bookings_per_slot", 1)
+        for time_str, count in slot_counts.items():
+            if count >= max_bookings:
+                booked.append(time_str)
+                
+    return booked
 
 def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time, note):
     """ส่งข้อมูลไปบันทึกด้วย RPC book_appointment ป้องกันคิวซ้ำแยกตามแผนก"""
@@ -683,16 +711,43 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
     time_str = f"{app_time}:00" # ส่งฟอร์แมต HH:MM:00
     
     if is_demo:
-        # จำลองการตรวจสอบสล็อต
+        # จำลองการตรวจสอบสล็อตโดยละเอียดตามกฎ slot_configs
+        dept_settings = st.session_state.settings.get(dept, {})
+        slot_configs = dept_settings.get("slot_configs", [])
+        
+        # 1. ค้นหาโควตาและเงื่อนไขเฉพาะของสล็อตนี้
+        max_bookings = 1
+        allowed_services = []
+        found_slot = False
+        for cfg in slot_configs:
+            if cfg.get("time") == app_time:
+                max_bookings = cfg.get("capacity", 1)
+                allowed_services = cfg.get("allowed_services", [])
+                found_slot = True
+                break
+        if not found_slot:
+            max_bookings = dept_settings.get("max_bookings_per_slot", 1)
+
+        # 2. ตรวจสอบความถูกต้องของประเภทบริการ
+        if allowed_services:
+            allowed_cleaned = [s.strip() for s in allowed_services if s.strip()]
+            if allowed_cleaned and service.strip() not in allowed_cleaned and "ทุกบริการ" not in allowed_cleaned:
+                return False, "รอบเวลานี้ไม่เปิดให้บริการสำหรับประเภทบริการที่เลือก"
+
+        # 3. นับจำนวนการจองใน mock db
+        current_bookings = 0
+        appointments = st.session_state.mock_db.get("appointments", [])
+        for app in appointments:
+            if app.get("department") == dept and app.get("appointment_date") == date_str and ":".join(app.get("appointment_time").split(":")[:2]) == app_time:
+                current_bookings += 1
+                
+        if current_bookings >= max_bookings:
+            return False, "ช่วงเวลานี้ถูกจองเต็มโควตาแล้ว"
+
         if dept not in st.session_state.mock_db["time_slots"]:
             st.session_state.mock_db["time_slots"][dept] = {}
-            
         if date_str not in st.session_state.mock_db["time_slots"][dept]:
             st.session_state.mock_db["time_slots"][dept][date_str] = {}
-            
-        slots = st.session_state.mock_db["time_slots"][dept][date_str]
-        if slots.get(app_time) == "booked":
-            return False, "ช่วงเวลานี้ถูกจองไปแล้วในระบบจำลอง"
             
         # บันทึกจองเวลา
         st.session_state.mock_db["time_slots"][dept][date_str][app_time] = "booked"
@@ -1879,7 +1934,7 @@ if app_mode == "ผู้รับบริการ (LINE LIFF)":
             st.session_state.selected_date = selected_date
             
             # ดึงช่วงเวลาที่ถูกจองไปแล้ว
-            booked_slots = get_booked_slots(selected_date, st.session_state.selected_dept)
+            booked_slots = get_booked_slots(selected_date, st.session_state.selected_dept, st.session_state.selected_service)
             
             st.write("#### ⏰ ช่วงเวลาให้บริการ")
             
@@ -2285,7 +2340,7 @@ else:
                     is_valid_date = False
                 
                 # ดึงช่วงเวลาที่ว่าง
-                booked_slots = get_booked_slots(staff_date, selected_staff_dept)
+                booked_slots = get_booked_slots(staff_date, selected_staff_dept, staff_service)
                 available_slots = [s for s in all_slots if s not in booked_slots]
                 
                 if not is_valid_date:
@@ -2625,26 +2680,122 @@ else:
                 
                 st.divider()
                 
-                # 4. ตารางเวลาให้บริการ
-                st.write("**⏰ ตารางเวลาให้บริการ (Time Slots)**")
-                current_slots = dept_settings.get("time_slots", ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"])
-                slots_str = ", ".join(current_slots)
+                # 4. ตารางเวลาให้บริการ (แบบ Slot Builder)
+                st.write("**⏰ ตารางเวลาและกฎให้บริการรายสล็อต (Time Slots & Capacity Rules)**")
+                st.info("💡 สามารถกำหนดเวลา จำนวนคิวที่รับ และบริการที่รับจองในสล็อตเวลานั้นๆ ได้ หากต้องการให้รับจองได้ทุกบริการ ให้ปล่อยช่อง 'บริการที่เปิดรับ' เป็นค่าว่าง")
+
+                # ดึงบริการทั้งหมดของแผนกนี้มาให้เลือก
+                dept_services = fetch_services(selected_manage_dept)
+                service_choices = [s.get("title", "") for s in dept_services if s.get("title")]
                 
-                cfg_slots_input = st.text_input(
-                    "ช่วงเวลาให้บริการ (คั่นด้วยเครื่องหมายจุลภาค ,):",
-                    value=slots_str,
-                    help="รูปแบบ HH:MM เช่น 08:30, 09:00, 13:30",
-                    key=f"cfg_slots_input_{selected_manage_dept}"
-                )
-                # แยกคำและทำความสะอาด
-                parsed_slots = []
-                if cfg_slots_input:
-                    for s in cfg_slots_input.split(","):
-                        s_clean = s.strip()
-                        if s_clean:
-                            if ":" in s_clean:
-                                parsed_slots.append(s_clean)
-                parsed_slots = sorted(list(set(parsed_slots)))
+                # โหลดการตั้งค่าสล็อตในปัจจุบัน
+                current_slot_configs = dept_settings.get("slot_configs", [])
+                
+                # หากยังไม่มี slot_configs ในระบบ (พึ่งอัปเกรดจากระบบเดิม) ให้จำลองแปลงข้อมูลจาก time_slots และ max_bookings_per_slot ของเก่า
+                if not current_slot_configs:
+                    old_slots = dept_settings.get("time_slots", ["08:30", "09:00", "09:30", "10:00", "13:30", "14:00", "14:30", "15:30", "16:00"])
+                    old_cap = dept_settings.get("max_bookings_per_slot", 1)
+                    current_slot_configs = [{"time": t, "capacity": old_cap, "allowed_services": []} for t in old_slots]
+
+                # สร้าง Session State สำหรับเก็บข้อมูลการอีดิตรายสล็อตแยกตามแผนกชั่วคราว
+                state_slots_key = f"editing_slots_config_{selected_manage_dept}"
+                if state_slots_key not in st.session_state:
+                    st.session_state[state_slots_key] = current_slot_configs
+
+                # หัวตารางจำลอง
+                col_header_t, col_header_c, col_header_s, col_header_del = st.columns([2, 2, 5, 1])
+                with col_header_t:
+                    st.write("**รอบเวลา**")
+                with col_header_c:
+                    st.write("**จำนวนคิว**")
+                with col_header_s:
+                    st.write("**บริการที่เปิดรับ**")
+                with col_header_del:
+                    st.write("**ลบ**")
+
+                updated_slot_configs = []
+                for idx, slot_item in enumerate(st.session_state[state_slots_key]):
+                    col_t, col_c, col_s, col_del = st.columns([2, 2, 5, 1])
+                    
+                    with col_t:
+                        # ช่องกรอกเวลา (HH:MM)
+                        s_time = st.text_input(
+                            "เวลา",
+                            value=slot_item.get("time", ""),
+                            key=f"item_time_{selected_manage_dept}_{idx}",
+                            label_visibility="collapsed",
+                            placeholder="เช่น 09:00"
+                        ).strip()
+                    
+                    with col_c:
+                        # จำนวนคิวสูงสุด
+                        s_cap = st.number_input(
+                            "จำนวนคิว",
+                            min_value=1,
+                            max_value=50,
+                            value=int(slot_item.get("capacity", 1)),
+                            key=f"item_cap_{selected_manage_dept}_{idx}",
+                            label_visibility="collapsed"
+                        )
+                        
+                    with col_s:
+                        # มัลติซีเล็กเลือกบริการที่ต้องการจำกัด
+                        # ดึงบริการที่มีอยู่ใน choices เท่านั้น
+                        default_allowed = [s for s in slot_item.get("allowed_services", []) if s in service_choices]
+                        s_services = st.multiselect(
+                            "บริการ",
+                            options=service_choices,
+                            default=default_allowed,
+                            key=f"item_services_{selected_manage_dept}_{idx}",
+                            label_visibility="collapsed",
+                            placeholder="เปิดรับทุกบริการ (คลิกเพื่อระบุเฉพาะเจาะจง)"
+                        )
+                        
+                    with col_del:
+                        # ปุ่มลบสล็อต
+                        if st.button("🗑️", key=f"btn_del_item_{selected_manage_dept}_{idx}", use_container_width=True):
+                            st.session_state[state_slots_key].pop(idx)
+                            st.rerun()
+                            
+                    updated_slot_configs.append({
+                        "time": s_time,
+                        "capacity": s_cap,
+                        "allowed_services": s_services
+                    })
+                    
+                # ปุ่มเพิ่มรอบเวลาใหม่
+                col_add_btn, _ = st.columns([1, 2])
+                with col_add_btn:
+                    if st.button("➕ เพิ่มรอบเวลาใหม่", key=f"btn_add_slot_item_{selected_manage_dept}", use_container_width=True):
+                        # ใช้เวลาเริ่มต้นเป็นเวลาเที่ยง
+                        st.session_state[state_slots_key].append({
+                            "time": "12:00",
+                            "capacity": 1,
+                            "allowed_services": []
+                        })
+                        st.rerun()
+
+                # เรียงลำดับตามรอบเวลาเพื่อความเป็นระเบียบเรียบร้อยก่อนบันทึก
+                # กรองค่าว่างและจัดรูปแบบให้ถูกต้องก่อนนำไปแปลงเป็น time_slots รายการใหญ่
+                final_slot_configs = []
+                for s in updated_slot_configs:
+                    if s["time"] and ":" in s["time"]:
+                        # ทำความสะอาดรูปแบบเวลา (เช่น 9:00 -> 09:00)
+                        parts = s["time"].split(":")
+                        try:
+                            h = int(parts[0])
+                            m = int(parts[1])
+                            time_cleaned = f"{h:02d}:{m:02d}"
+                            s["time"] = time_cleaned
+                            final_slot_configs.append(s)
+                        except ValueError:
+                            pass
+                            
+                # จัดเรียงตามเวลา
+                final_slot_configs = sorted(final_slot_configs, key=lambda x: x["time"])
+                
+                # รายชื่อ time_slots แบบข้อความ เพื่อ Backward Compatibility ในฟิลด์เดิมของ DB
+                parsed_slots = [s["time"] for s in final_slot_configs]
                 
                 st.divider()
                 
@@ -2673,7 +2824,8 @@ else:
                                 selected_working_days,
                                 current_closed_dates,
                                 parsed_slots,
-                                cfg_capacity
+                                cfg_capacity,
+                                final_slot_configs
                             )
                             st.success(f"เพิ่มวันที่ {format_thai_date(new_closed_date)} เป็นวันหยุดเรียบร้อยแล้ว")
                             st.rerun()
@@ -2700,7 +2852,8 @@ else:
                                         selected_working_days,
                                         current_closed_dates,
                                         parsed_slots,
-                                        cfg_capacity
+                                        cfg_capacity,
+                                        final_slot_configs
                                     )
                                     st.success("นำวันหยุดออกแล้ว")
                                     st.rerun()
@@ -2720,9 +2873,12 @@ else:
                             selected_working_days,
                             current_closed_dates,
                             parsed_slots,
-                            cfg_capacity
+                            cfg_capacity,
+                            final_slot_configs
                         )
                         if success:
+                            if state_slots_key in st.session_state:
+                                del st.session_state[state_slots_key]
                             st.success(f"🟢 {message}")
                             st.rerun()
                         else:
