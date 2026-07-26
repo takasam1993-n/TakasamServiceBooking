@@ -2052,66 +2052,26 @@ with st.sidebar:
         st.success("🔌 เชื่อมต่อ Supabase แล้ว")
         st.caption(f"URL: `{supabase_url[:25]}...`")
 
-# ----------------- LINE LIFF Javascript integration -----------------
+# ----------------- LINE LIFF Custom Component integration -----------------
+import os
+_LIFF_COMPONENT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "liff_component")
+_liff_login_func = components.declare_component("liff_login", path=_LIFF_COMPONENT_PATH)
+
 def render_liff_login(liff_id):
     if not liff_id or "xxxxxxxx" in liff_id:
         return
+        
+    profile = _liff_login_func(liffId=liff_id, key="liff_login_comp")
     
-    liff_js = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>LINE LIFF Login</title>
-        <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    </head>
-    <body>
-        <script>
-            liff.init({{ liffId: "{liff_id}" }}).then(() => {{
-                const getParentUrl = () => {{
-                    try {{
-                        return new URL(window.parent.location.href);
-                    }} catch (e) {{
-                        if (document.referrer) {{
-                            return new URL(document.referrer);
-                        }}
-                        return new URL(window.location.href);
-                    }}
-                }};
-                
-                const updateParentUrl = (profile) => {{
-                    const parentUrl = getParentUrl();
-                    if (parentUrl.searchParams.get("userId") !== profile.userId) {{
-                        parentUrl.searchParams.set("userId", profile.userId);
-                        parentUrl.searchParams.set("displayName", profile.displayName);
-                        if (profile.pictureUrl) {{
-                            parentUrl.searchParams.set("pictureUrl", profile.pictureUrl);
-                        }}
-                        try {{
-                            window.parent.location.replace(parentUrl.toString());
-                        }} catch (e) {{
-                            window.parent.location.href = parentUrl.toString();
-                        }}
-                    }}
-                }};
-
-                if (liff.isInClient()) {{
-                    if (!liff.isLoggedIn()) {{
-                        liff.login();
-                    }} else {{
-                        liff.getProfile().then(updateParentUrl);
-                    }}
-                }} else {{
-                    if (liff.isLoggedIn()) {{
-                        liff.getProfile().then(updateParentUrl);
-                    }}
-                }}
-            }});
-        </script>
-    </body>
-    </html>
-    """
-    components.html(liff_js, height=0)
+    if profile and isinstance(profile, dict):
+        user_id = profile.get("userId")
+        display_name = profile.get("displayName", "ผู้ใช้งาน LINE")
+        picture_url = profile.get("pictureUrl", "")
+        
+        if user_id:
+            st.session_state.line_user_id = user_id
+            st.session_state.line_display_name = display_name
+            st.session_state.line_picture_url = picture_url
 
 # ----------------- PATIENT PORTAL (LINE LIFF) -----------------
 if app_mode == "ผู้รับบริการ (LINE LIFF)":
