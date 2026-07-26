@@ -2678,6 +2678,13 @@ else:
         # --- TAB 1: DASHBOARD ---
         with tab_dash:
             st.write("### สรุปตัวเลขและการวิเคราะห์ข้อมูล")
+            st.link_button(
+                "🌐 กดเพื่อดู Dashboard on Web", 
+                "https://script.google.com/macros/s/AKfycbxBgYDXVpAoxwKO5CExTNnU2POMdR71IeTvJFFxYbf8GWdzE6lA_SL2bW0T5XwCSjuc2w/exec", 
+                type="primary", 
+                use_container_width=True
+            )
+            st.write("")
             
             depts_list = fetch_all_departments()
             dash_choices = ["รวมทุกแผนก (All Departments)"] + [f"{d['display_name']} ({d['key']})" for d in depts_list]
