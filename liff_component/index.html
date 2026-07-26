@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>LINE LIFF Login</title>
+  <!-- Load LIFF SDK -->
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+  <div id="status" style="font-family: sans-serif; font-size: 12px; color: #666; text-align: center; padding-top: 5px;">
+    กำลังเชื่อมต่อ LINE...
+  </div>
+  <script>
+    // Flag to prevent infinite rendering loop
+    let hasSentValue = false;
+
+    // Streamlit component communication helpers
+    function sendToStreamlit(type, data) {
+      window.parent.postMessage({
+        isStreamlitMessage: true,
+        type: type,
+        apiVersion: 1,
+        ...data
+      }, "*");
+    }
+
+    // Listen for render events from Streamlit python
+    window.addEventListener("message", function(event) {
+      if (event.data.type === "streamlit:render") {
+        // If we already obtained and sent the profile, do nothing
+        if (hasSentValue) {
+          return;
+        }
+
+        const args = event.data.args;
+        const liffId = args.liffId;
+        
+        if (!liffId) {
+          document.getElementById("status").innerText = "ไม่พบ LIFF ID ในการตั้งค่า";
+          return;
+        }
+
+        liff.init({ liffId: liffId }).then(() => {
+          if (!liff.isLoggedIn()) {
+            document.getElementById("status").innerText = "กำลังเข้าสู่ระบบ LINE...";
+            liff.login();
+          } else {
+            document.getElementById("status").innerText = "เชื่อมต่อสำเร็จ";
+            liff.getProfile().then((profile) => {
+              // Mark as sent to prevent loop
+              hasSentValue = true;
+              
+              // Pass profile data back to Streamlit python
+              sendToStreamlit("streamlit:setComponentValue", {
+                value: {
+                  userId: profile.userId,
+                  displayName: profile.displayName,
+                  pictureUrl: profile.pictureUrl || ""
+                }
+              });
+            }).catch((err) => {
+              document.getElementById("status").innerText = "ดึงข้อมูลโปรไฟล์ล้มเหลว";
+              console.error(err);
+            });
+          }
+        }).catch((err) => {
+          document.getElementById("status").innerText = "LIFF เริ่มการทำงานล้มเหลว";
+          console.error(err);
+        });
+      }
+    });
+
+    // Notify Streamlit that the component is loaded and ready
+    sendToStreamlit("streamlit:componentReady", {});
+  </script>
+</body>
+</html>
