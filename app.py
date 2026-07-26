@@ -2061,7 +2061,7 @@ def render_liff_login(liff_id):
     if not liff_id or "xxxxxxxx" in liff_id:
         return
         
-    profile = _liff_login_func(liffId=liff_id, key="liff_login_comp")
+    profile = _liff_login_func(liffId=liff_id, key="liff_login_comp", height=40)
     
     if profile and isinstance(profile, dict):
         user_id = profile.get("userId")

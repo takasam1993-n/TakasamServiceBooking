@@ -59,12 +59,12 @@
                 }
               });
             }).catch((err) => {
-              document.getElementById("status").innerText = "ดึงข้อมูลโปรไฟล์ล้มเหลว";
+              document.getElementById("status").innerText = "ดึงข้อมูลโปรไฟล์ล้มเหลว: " + err;
               console.error(err);
             });
           }
         }).catch((err) => {
-          document.getElementById("status").innerText = "LIFF เริ่มการทำงานล้มเหลว";
+          document.getElementById("status").innerText = "LIFF เริ่มการทำงานล้มเหลว: " + err;
           console.error(err);
         });
       }
