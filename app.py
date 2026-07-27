@@ -258,7 +258,8 @@ if "mock_db" not in st.session_state:
                 "appointment_date": today_str,
                 "appointment_time": "09:30",
                 "note": "ตรวจฟันประจำปี",
-                "reminder_sent": False
+                "reminder_sent": False,
+                "status": "booked"
             },
             {
                 "id": 2,
@@ -271,7 +272,8 @@ if "mock_db" not in st.session_state:
                 "appointment_date": today_str,
                 "appointment_time": "14:00",
                 "note": "วัสดุอุดเดิมหลุด",
-                "reminder_sent": False
+                "reminder_sent": False,
+                "status": "booked"
             },
             {
                 "id": 3,
@@ -284,7 +286,8 @@ if "mock_db" not in st.session_state:
                 "appointment_date": tomorrow_str,
                 "appointment_time": "10:00",
                 "note": "โทรมาจองนวดตัว",
-                "reminder_sent": False
+                "reminder_sent": False,
+                "status": "booked"
             },
             {
                 "id": 4,
@@ -297,7 +300,8 @@ if "mock_db" not in st.session_state:
                 "appointment_date": tomorrow_str,
                 "appointment_time": "15:30",
                 "note": "ฟื้นฟูกล้ามเนื้อ",
-                "reminder_sent": False
+                "reminder_sent": False,
+                "status": "booked"
             }
         ],
         "services": [
@@ -924,10 +928,11 @@ def render_appointment_details_view(app_id):
                         del st.session_state.confirm_cancel_id
                     st.success("🎉 ยกเลิกการนัดหมายสำเร็จแล้ว ระบบจะนำคุณกลับหน้าหลักใน 3 วินาที...")
                     
-                    # Try to send cancel LINE notification if token is available
+                    # Try to send cancel LINE notification if token is available (except if completed)
                     if app.get("user_id") and app.get("user_id") != "NON_LINE_USER" and not app.get("user_id").startswith("STAFF"):
-                        cancel_msg = f"แจ้งเตือน: นัดหมาย {dept_name} วันที่ {thai_date_str} เวลา {time_str} น. ของท่าน ได้รับการยกเลิกเรียบร้อยแล้วค่ะ"
-                        send_line_push_message(app.get("user_id"), cancel_msg)
+                        if app.get("status", "booked") != "completed":
+                            cancel_msg = f"แจ้งเตือน: นัดหมาย {dept_name} วันที่ {thai_date_str} เวลา {time_str} น. ของท่าน ได้รับการยกเลิกเรียบร้อยแล้วค่ะ"
+                            send_line_push_message(app.get("user_id"), cancel_msg)
                         
                     import time
                     time.sleep(3)
@@ -1157,7 +1162,8 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
             "appointment_date": date_str,
             "appointment_time": app_time,
             "note": note,
-            "reminder_sent": False
+            "reminder_sent": False,
+            "status": "booked"
         })
         st.session_state.appointment_id = f"DEMO-{app_id:04d}"
         
@@ -2026,6 +2032,31 @@ def cancel_appointment_db(app_id):
         return result.get("success", False), result.get("message", "เกิดข้อผิดพลาด")
     except Exception as e:
         return False, f"เกิดข้อผิดพลาดในการยกเลิก: {e}"
+
+def complete_appointment_db(app_id):
+    """เปลี่ยนสถานะการนัดหมายเป็นเสร็จสิ้น (จบกระบวนการ)"""
+    if is_demo:
+        appointments = st.session_state.mock_db["appointments"]
+        cleaned_id = str(app_id).replace("DEMO-", "")
+        for app in appointments:
+            if str(app.get("id")) == cleaned_id:
+                app["status"] = "completed"
+                return True, "บันทึกเสร็จสิ้นการบริการ (โหมดสาธิต) สำเร็จ"
+        return False, "ไม่พบข้อมูลการนัดหมายที่เลือก"
+        
+    if not supabase_client:
+        return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
+        
+    try:
+        response = supabase_client.table("appointments")\
+            .update({"status": "completed"})\
+            .eq("id", int(app_id))\
+            .execute()
+        if response.data:
+            return True, "บันทึกเสร็จสิ้นการบริการสำเร็จ"
+        return False, "ไม่สามารถอัปเดตข้อมูลได้"
+    except Exception as e:
+        return False, f"เกิดข้อผิดพลาดในการอัปเดตสถานะ: {e}"
 
 def send_line_push_message(user_id, message_text):
     """ส่ง Push Message คอนเฟิร์มหรือแจ้งเตือนไปยังผู้ใช้รายบุคคล"""
@@ -2934,7 +2965,7 @@ else:
                         # ฟอร์แมตหัวตารางแสดงสิทธิ์
                         df_show_display = df_show[[
                             "id", "department", "name", "phone", "cid", "service_type", 
-                            "appointment_date", "appointment_time", "note"
+                            "appointment_date", "appointment_time", "note", "status"
                         ]].copy()
                         
                         # แปลงแผนกให้อ่านง่าย
@@ -2945,9 +2976,17 @@ else:
                         }
                         df_show_display['department'] = df_show_display['department'].map(dept_display_map)
                         
+                        # แปลงสถานะให้อ่านง่าย
+                        status_display_map = {
+                            "booked": "⏳ รอดำเนินการ",
+                            "completed": "✅ เสร็จสิ้น",
+                            "pending": "⏳ รอดำเนินการ"
+                        }
+                        df_show_display['status'] = df_show_display['status'].map(status_display_map).fillna("⏳ รอดำเนินการ")
+                        
                         df_show_display.columns = [
                             "รหัสนัด", "แผนก", "ชื่อ-นามสกุล", "เบอร์โทร", "เลขบัตรประชาชน", 
-                            "ประเภทบริการ", "วันที่นัดหมาย", "เวลานัด", "หมายเหตุ"
+                            "ประเภทบริการ", "วันที่นัดหมาย", "เวลานัด", "หมายเหตุ", "สถานะ"
                         ]
                         
                         # แทรกคอลัมน์เลือกสำหรับการเลือกลบแบบกลุ่ม (Bulk Delete)
@@ -2957,58 +2996,95 @@ else:
                             df_show_display,
                             use_container_width=True,
                             hide_index=True,
-                            disabled=["รหัสนัด", "แผนก", "ชื่อ-นามสกุล", "เบอร์โทร", "เลขบัตรประชาชน", "ประเภทบริการ", "วันที่นัดหมาย", "เวลานัด", "หมายเหตุ"]
+                            disabled=["รหัสนัด", "แผนก", "ชื่อ-นามสกุล", "เบอร์โทร", "เลขบัตรประชาชน", "ประเภทบริการ", "วันที่นัดหมาย", "เวลานัด", "หมายเหตุ", "สถานะ"]
                         )
                         
                         selected_rows = edited_df[edited_df["เลือก"] == True]
                         
-                        # ส่วนยกเลิกคิวนัดหมาย
+                        # ส่วนควบคุมสถานะและการยกเลิกนัดหมาย
                         st.divider()
-                        st.write("#### 🗑️ ยกเลิกและลบคิวนัดหมายผู้เข้าบริการ")
+                        st.write("#### ⚙️ จัดการสถานะและการเข้ารับบริการ")
+                        
+                        col_action1, col_action2 = st.columns(2)
+                        with col_action1:
+                            btn_complete = st.button("✅ บันทึกเป็น 'เสร็จสิ้นการบริการ' (จบกระบวนการ)", type="secondary", use_container_width=True, disabled=selected_rows.empty)
+                        with col_action2:
+                            btn_delete = st.button("🗑️ ยกเลิกและลบคิวนัดหมายผู้เข้าบริการ", type="primary", use_container_width=True, disabled=selected_rows.empty)
                         
                         if not selected_rows.empty:
-                            st.warning(f"⚠️ คุณกำลังจะลบคิวนัดหมายที่เลือกจำนวน {len(selected_rows)} รายการ การลบนี้จะเปิดเวลากลับคืนระบบเพื่อให้ผู้อื่นจองใหม่ได้")
-                            if st.button(f"ยืนยันลบรายการที่เลือกทั้งหมด ({len(selected_rows)} รายการ) 🗑️", type="primary", use_container_width=True):
+                            if btn_complete:
                                 success_count = 0
                                 fail_count = 0
                                 fail_messages = []
-                                
                                 for _, row in selected_rows.iterrows():
                                     app_id = int(row["รหัสนัด"])
-                                    # ดึงข้อมูลก่อนลบเพื่อใช้ส่งไลน์ OA
-                                    app_data = fetch_appointment_by_id(app_id)
-                                    
-                                    success, message = cancel_appointment_db(app_id)
+                                    success, message = complete_appointment_db(app_id)
                                     if success:
                                         success_count += 1
-                                        # แจ้งเตือนผู้รับบริการทาง LINE OA
-                                        if app_data and app_data.get("user_id") and app_data.get("user_id") != "NON_LINE_USER" and not app_data.get("user_id").startswith("STAFF"):
-                                            dept_name_th = DEPT_THEMES.get(app_data.get("department", ""), {}).get("title_thai", "บริการทั่วไป")
-                                            if not dept_name_th.startswith("แผนก"):
-                                                dept_name_th = f"แผนก{dept_name_th}"
-                                            try:
-                                                date_obj = datetime.date.fromisoformat(app_data.get("appointment_date", ""))
-                                                thai_date_str = format_thai_date(date_obj)
-                                            except Exception:
-                                                thai_date_str = app_data.get("appointment_date", "")
-                                            time_str = ":".join(str(app_data.get("appointment_time", "")).split(":")[:2])
-                                            
-                                            cancel_msg = f"แจ้งเตือน: นัดหมาย {dept_name_th} วันที่ {thai_date_str} เวลา {time_str} น. ของท่าน ได้รับการยกเลิกโดยเจ้าหน้าที่เรียบร้อยแล้วค่ะ"
-                                            send_line_push_message(app_data.get("user_id"), cancel_msg)
                                     else:
                                         fail_count += 1
                                         fail_messages.append(f"รหัส #{app_id}: {message}")
-                                
                                 if success_count > 0:
-                                    msg_text = f"ยกเลิกนัดหมายสำเร็จ {success_count} รายการ และเปิดสล็อตเวลากลับคืนระบบเรียบร้อยแล้ว!"
-                                    st.session_state.toast_notification = {"message": msg_text, "icon": "✅"}
+                                    st.session_state.toast_notification = {"message": f"บันทึกเสร็จสิ้นการบริการสำเร็จ {success_count} รายการ!", "icon": "✅"}
+                                if fail_count > 0:
+                                    st.error(f"เกิดข้อผิดพลาด {fail_count} รายการ:\n" + "\n".join(fail_messages))
+                                st.rerun()
+                                
+                            if btn_delete:
+                                st.session_state.confirm_bulk_delete = True
+                                st.rerun()
+                                
+                        if st.session_state.get("confirm_bulk_delete") and not selected_rows.empty:
+                            st.warning(f"⚠️ คุณกำลังจะลบคิวนัดหมายที่เลือกจำนวน {len(selected_rows)} รายการ การลบนี้จะเปิดเวลากลับคืนระบบเพื่อให้ผู้อื่นจองใหม่ได้")
+                            cc1, cc2 = st.columns(2)
+                            with cc1:
+                                if st.button("ยืนยันลบรายการที่เลือกทั้งหมด 🗑️", type="primary", use_container_width=True):
+                                    del st.session_state.confirm_bulk_delete
+                                    success_count = 0
+                                    fail_count = 0
+                                    fail_messages = []
+                                    
+                                    for _, row in selected_rows.iterrows():
+                                        app_id = int(row["รหัสนัด"])
+                                        # ดึงข้อมูลก่อนลบเพื่อใช้ส่งไลน์ OA
+                                        app_data = fetch_appointment_by_id(app_id)
+                                        
+                                        success, message = cancel_appointment_db(app_id)
+                                        if success:
+                                            success_count += 1
+                                            # แจ้งเตือนผู้รับบริการทาง LINE OA (ยกเว้นผู้ที่จบกระบวนการเสร็จสิ้นแล้ว)
+                                            if app_data and app_data.get("user_id") and app_data.get("user_id") != "NON_LINE_USER" and not app_data.get("user_id").startswith("STAFF"):
+                                                if app_data.get("status", "booked") != "completed":
+                                                    dept_name_th = DEPT_THEMES.get(app_data.get("department", ""), {}).get("title_thai", "บริการทั่วไป")
+                                                    if not dept_name_th.startswith("แผนก"):
+                                                        dept_name_th = f"แผนก{dept_name_th}"
+                                                    try:
+                                                        date_obj = datetime.date.fromisoformat(app_data.get("appointment_date", ""))
+                                                        thai_date_str = format_thai_date(date_obj)
+                                                    except Exception:
+                                                        thai_date_str = app_data.get("appointment_date", "")
+                                                    time_str = ":".join(str(app_data.get("appointment_time", "")).split(":")[:2])
+                                                    
+                                                    cancel_msg = f"แจ้งเตือน: นัดหมาย {dept_name_th} วันที่ {thai_date_str} เวลา {time_str} น. ของท่าน ได้รับการยกเลิกโดยเจ้าหน้าที่เรียบร้อยแล้วค่ะ"
+                                                    send_line_push_message(app_data.get("user_id"), cancel_msg)
+                                        else:
+                                            fail_count += 1
+                                            fail_messages.append(f"รหัส #{app_id}: {message}")
+                                    
+                                    if success_count > 0:
+                                        msg_text = f"ยกเลิกนัดหมายสำเร็จ {success_count} รายการ และเปิดสล็อตเวลากลับคืนระบบเรียบร้อยแล้ว!"
+                                        st.session_state.toast_notification = {"message": msg_text, "icon": "✅"}
                                     if fail_count > 0:
                                         st.warning(f"ลบล้มเหลว {fail_count} รายการ:\n" + "\n".join(fail_messages))
                                     st.rerun()
-                                elif fail_count > 0:
-                                    st.error(f"ไม่สามารถดำเนินการลบได้เนื่องจาก:\n" + "\n".join(fail_messages))
-                        else:
-                            st.info("💡 กรุณาติ๊กเลือกช่อง 'เลือก' ที่แถวด้านซ้ายมือสุดของตาราง เพื่อเลือกรายการที่ต้องการลบ")
+                            with cc2:
+                                if st.button("ยกเลิกการลบ ✖️", use_container_width=True):
+                                    del st.session_state.confirm_bulk_delete
+                                    st.rerun()
+                        elif selected_rows.empty:
+                            if "confirm_bulk_delete" in st.session_state:
+                                del st.session_state.confirm_bulk_delete
+                            st.info("💡 กรุณาติ๊กเลือกช่อง 'เลือก' ที่แถวด้านซ้ายมือสุดของตาราง เพื่อเลือกรายการที่ต้องการดำเนินการ")
  
         # --- TAB 4: MANAGE SERVICES ---
         with tab_services:
