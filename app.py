@@ -259,7 +259,8 @@ if "mock_db" not in st.session_state:
                 "appointment_time": "09:30",
                 "note": "ตรวจฟันประจำปี",
                 "reminder_sent": False,
-                "status": "booked"
+                "status": "booked",
+                "gcal_event_id": "MOCK-EVENT-0001"
             },
             {
                 "id": 2,
@@ -273,7 +274,8 @@ if "mock_db" not in st.session_state:
                 "appointment_time": "14:00",
                 "note": "วัสดุอุดเดิมหลุด",
                 "reminder_sent": False,
-                "status": "booked"
+                "status": "booked",
+                "gcal_event_id": "MOCK-EVENT-0002"
             },
             {
                 "id": 3,
@@ -287,7 +289,8 @@ if "mock_db" not in st.session_state:
                 "appointment_time": "10:00",
                 "note": "โทรมาจองนวดตัว",
                 "reminder_sent": False,
-                "status": "booked"
+                "status": "booked",
+                "gcal_event_id": "MOCK-EVENT-0003"
             },
             {
                 "id": 4,
@@ -301,7 +304,8 @@ if "mock_db" not in st.session_state:
                 "appointment_time": "15:30",
                 "note": "ฟื้นฟูกล้ามเนื้อ",
                 "reminder_sent": False,
-                "status": "booked"
+                "status": "booked",
+                "gcal_event_id": "MOCK-EVENT-0004"
             }
         ],
         "services": [
@@ -1039,10 +1043,32 @@ def create_gcal_event(dept, title, appointment_date, appointment_time, descripti
     try:
         event_result = service.events().insert(calendarId=calendar_id, body=event).execute()
         print(f"บันทึกคิวลง Google Calendar กลางเรียบร้อยแล้ว: {event_result.get('htmlLink')}")
-        return event_result.get('htmlLink')
+        return event_result.get('id')
     except Exception as e:
         print(f"เกิดข้อผิดพลาดในการบันทึกคิวลง Google Calendar: {e}")
         return None
+
+def delete_gcal_event(dept, event_id):
+    """ลบเหตุการณ์นัดหมายออกจาก Google Calendar ตามรหัสอ้างอิง"""
+    if not event_id:
+        return False
+    service = get_calendar_service()
+    if not service:
+        print("คำเตือน: ยังไม่ได้ตั้งค่า google_calendar_credentials จึงข้ามการลบเหตุการณ์ใน Google Calendar")
+        return False
+        
+    calendar_id = dept_cal_map.get(dept, google_calendar_id)
+    if not calendar_id:
+        print(f"คำเตือน: ไม่พบ Calendar ID สำหรับแผนก {dept} จึงข้ามการลบ")
+        return False
+        
+    try:
+        service.events().delete(calendarId=calendar_id, eventId=event_id).execute()
+        print(f"ลบเหตุการณ์ใน Google Calendar เรียบร้อยแล้ว: {event_id}")
+        return True
+    except Exception as e:
+        print(f"เกิดข้อผิดพลาดในการลบเหตุการณ์ใน Google Calendar: {e}")
+        return False
 
 def get_booked_slots(date_obj, dept, selected_service=None):
     """ดึงเวลาที่ถูกจองไปแล้วในวันที่เลือกของแผนกที่ระบุโดยคำนวณตามจำนวนสูงสุดที่รับได้และกฎบริการรักษา"""
@@ -1172,7 +1198,7 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
             q_num = get_queue_number(app_time)
             cal_desc = f"รหัสอ้างอิงการจองคิว: คิวที่ {q_num} (อ้างอิง: DEMO-{app_id:04d})\nผู้รับบริการ: {name}\nเบอร์โทรศัพท์: {phone}\nอาการ/หมายเหตุ: {note}\n\nจองคิวออนไลน์ผ่านระบบ รพ.สต.ท่าเกษม"
             dept_title = DEPT_THEMES.get(dept, {}).get("title_thai", "บริการทั่วไป")
-            create_gcal_event(
+            gcal_id_val = create_gcal_event(
                 dept=dept,
                 title=f"นัดหมาย{dept_title} [{name}]: {service}",
                 appointment_date=app_date,
@@ -1180,6 +1206,9 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
                 description=cal_desc,
                 location="รพ.สต.ท่าเกษม อ.เมืองสระแก้ว จ.สระแก้ว"
             )
+            if not gcal_id_val:
+                gcal_id_val = f"MOCK-EVENT-{app_id}"
+            st.session_state.mock_db["appointments"][-1]["gcal_event_id"] = gcal_id_val
         except Exception as e:
             print(f"เกิดข้อผิดพลาดในการบันทึกปฏิทินเดโม: {e}")
             
@@ -1228,7 +1257,7 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
                         q_num = get_queue_number(app_time)
                         cal_desc = f"รหัสอ้างอิงการจองคิว: คิวที่ {q_num} (อ้างอิง: #{app_id_val})\nผู้รับบริการ: {name}\nเบอร์โทรศัพท์: {phone}\nอาการ/หมายเหตุ: {note}\n\nจองคิวออนไลน์ผ่านระบบ รพ.สต.ท่าเกษม"
                         dept_title = DEPT_THEMES.get(dept, {}).get("title_thai", "บริการทั่วไป")
-                        create_gcal_event(
+                        gcal_id_val = create_gcal_event(
                             dept=dept,
                             title=f"นัดหมาย{dept_title} [{name}]: {service}",
                             appointment_date=app_date,
@@ -1236,6 +1265,12 @@ def execute_booking(dept, user_id, name, phone, cid, service, app_date, app_time
                             description=cal_desc,
                             location="รพ.สต.ท่าเกษม อ.เมืองสระแก้ว จ.สระแก้ว"
                         )
+                        if gcal_id_val:
+                            # บันทึกรหัส Event กลับเข้าตาราง appointments
+                            supabase_client.table("appointments")\
+                                .update({"gcal_event_id": gcal_id_val})\
+                                .eq("id", int(app_id_val))\
+                                .execute()
                     except Exception as cal_ex:
                         print(f"เกิดข้อผิดพลาดในการบันทึกปฏิทินกลาง: {cal_ex}")
             except Exception as query_ex:
@@ -2009,6 +2044,10 @@ def cancel_appointment_db(app_id):
         if not app_to_cancel:
             return False, "ไม่พบข้อมูลการนัดหมายที่เลือก"
         
+        # ลบเหตุการณ์นัดหมายออกจาก Google Calendar
+        if app_to_cancel.get("gcal_event_id"):
+            delete_gcal_event(app_to_cancel.get("department"), app_to_cancel.get("gcal_event_id"))
+
         # ลบนัดหมายออก
         appointments.remove(app_to_cancel)
         
@@ -2027,6 +2066,11 @@ def cancel_appointment_db(app_id):
         return False, "ไม่สามารถเชื่อมต่อฐานข้อมูลได้"
         
     try:
+        # ค้นหาข้อมูลการนัดหมายก่อนลบเพื่อดึง gcal_event_id
+        app_data = fetch_appointment_by_id(app_id)
+        if app_data and app_data.get("gcal_event_id"):
+            delete_gcal_event(app_data.get("department"), app_data.get("gcal_event_id"))
+
         response = supabase_client.rpc("cancel_appointment", {"p_appointment_id": int(app_id)}).execute()
         result = response.data[0] if response.data else {"success": False, "message": "ไม่มีการตอบสนองจากระบบ"}
         return result.get("success", False), result.get("message", "เกิดข้อผิดพลาด")
